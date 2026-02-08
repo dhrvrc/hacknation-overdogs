@@ -236,9 +236,11 @@ class QAScorer:
             prompt_parts.append("\n## CONVERSATION TRANSCRIPT\n")
             prompt_parts.append(f"Channel: {conversation.get('Channel', 'N/A')}\n")
             prompt_parts.append(f"Agent: {conversation.get('Agent_Name', 'N/A')}\n")
-            prompt_parts.append(f"Sentiment: {conversation.get('Sentiment', 'N/A')}\n")
+            prompt_parts.append(f"Sentiment: {conversation.get('Sentiment', conversation.get('Customer_Sentiment', 'N/A'))}\n")
 
-            transcript = conversation.get('Transcript_Text', '')
+            # Handle both column name variants: real data uses "Transcript",
+            # synthetic tickets may use "Transcript_Text"
+            transcript = conversation.get('Transcript', conversation.get('Transcript_Text', ''))
             # Truncate to 4000 chars if needed
             if len(transcript) > 4000:
                 transcript = transcript[:4000] + "\n[...truncated]"

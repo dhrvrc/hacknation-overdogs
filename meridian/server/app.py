@@ -10,6 +10,21 @@ import logging
 import time
 from typing import Optional, List, Dict, Any
 
+from meridian.server.contracts import (
+    QueryResponse,
+    ProvenanceResponse,
+    DashboardResponse,
+    ConversationResponse,
+    QAScoreResponse,
+    ApproveResponse,
+    RejectResponse,
+    HealthResponse,
+    adapt_eval_results,
+    build_default_eval_results,
+    compute_placeholders_total,
+    get_conversation_field,
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -93,7 +108,7 @@ class QAScoreRequest(BaseModel):
 # HEALTH CHECK
 # ============================================================================
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 def health_check():
     """Health check endpoint"""
     return {
@@ -183,7 +198,7 @@ def get_stub_provenance(doc_id: str) -> dict:
 
 
 def get_stub_dashboard_stats() -> dict:
-    """Return stub dashboard statistics"""
+    """Return stub dashboard statistics matching the frontend contract exactly."""
     return {
         "knowledge_health": {
             "total_articles": 0,
@@ -192,7 +207,8 @@ def get_stub_dashboard_stats() -> dict:
             "articles_with_metadata": 0,
             "articles_without_metadata": 0,
             "avg_body_length": 0,
-            "scripts_total": 0
+            "scripts_total": 0,
+            "placeholders_total": 0,
         },
         "learning_pipeline": {
             "total_events": 0,
@@ -208,7 +224,7 @@ def get_stub_dashboard_stats() -> dict:
             "by_module": {}
         },
         "emerging_issues": [],
-        "eval_results": None
+        "eval_results": build_default_eval_results(),
     }
 
 
@@ -229,7 +245,7 @@ def get_stub_conversation(ticket_number: str) -> dict:
 # MAIN ENDPOINTS
 # ============================================================================
 
-@app.post("/api/query")
+@app.post("/api/query", response_model=QueryResponse)
 def query_engine(req: QueryRequest):
     """
     Main copilot query endpoint.
@@ -297,7 +313,7 @@ def query_engine(req: QueryRequest):
         raise HTTPException(500, f"Query processing failed: {str(e)}")
 
 
-@app.get("/api/provenance/{doc_id}")
+@app.get("/api/provenance/{doc_id}", response_model=ProvenanceResponse)
 def get_provenance(doc_id: str):
     """Get full provenance chain for a document"""
     if not ENGINE_AVAILABLE:
@@ -330,7 +346,7 @@ def get_provenance(doc_id: str):
         raise HTTPException(500, f"Provenance resolution failed: {str(e)}")
 
 
-@app.get("/api/dashboard/stats")
+@app.get("/api/dashboard/stats", response_model=DashboardResponse)
 def get_dashboard():
     """Get aggregated dashboard statistics"""
     if not ENGINE_AVAILABLE:
@@ -354,6 +370,7 @@ def get_dashboard():
         ) // max(total_articles, 1)
 
         scripts_total = sum(1 for d in ds.documents if d.doc_type == "SCRIPT")
+        placeholders_total = compute_placeholders_total(ds.documents)
 
         # Learning pipeline stats
         learning_events = ds.df_learning_events if hasattr(ds, 'df_learning_events') else None
@@ -398,8 +415,8 @@ def get_dashboard():
             gaps = gap.scan_all_tickets()
             CACHED_EMERGING_ISSUES = gap.detect_emerging_issues(gaps, min_cluster_size=3)
 
-        # Eval results (use cached if available)
-        eval_results = CACHED_EVAL_RESULTS
+        # Eval results: adapt to frontend contract or use defaults
+        eval_results = adapt_eval_results(CACHED_EVAL_RESULTS)
 
         return {
             "knowledge_health": {
@@ -409,7 +426,8 @@ def get_dashboard():
                 "articles_with_metadata": articles_with_metadata,
                 "articles_without_metadata": total_articles - articles_with_metadata,
                 "avg_body_length": avg_body_length,
-                "scripts_total": scripts_total
+                "scripts_total": scripts_total,
+                "placeholders_total": placeholders_total,
             },
             "learning_pipeline": {
                 "total_events": total_events,
@@ -433,7 +451,7 @@ def get_dashboard():
         raise HTTPException(500, f"Dashboard stats failed: {str(e)}")
 
 
-@app.get("/api/conversations/{ticket_number}")
+@app.get("/api/conversations/{ticket_number}", response_model=ConversationResponse)
 def get_conversation(ticket_number: str):
     """Get conversation transcript for a ticket"""
     if not ENGINE_AVAILABLE:
@@ -449,14 +467,21 @@ def get_conversation(ticket_number: str):
 
         conv_row = conv.iloc[0]
 
+        # Use fallback helpers for columns that differ between real data and
+        # synthetic tickets (Sentiment vs Customer_Sentiment, Transcript vs
+        # Transcript_Text).
         return {
             "ticket_number": ticket_number,
             "conversation_id": conv_row["Conversation_ID"],
             "channel": conv_row["Channel"],
             "agent_name": conv_row["Agent_Name"],
-            "sentiment": conv_row["Sentiment"],
+            "sentiment": get_conversation_field(
+                conv_row, "Sentiment", "Customer_Sentiment", default="Neutral"
+            ),
             "issue_summary": conv_row["Issue_Summary"],
-            "transcript": conv_row["Transcript"]
+            "transcript": get_conversation_field(
+                conv_row, "Transcript", "Transcript_Text", default=""
+            ),
         }
 
     except HTTPException:
@@ -466,14 +491,28 @@ def get_conversation(ticket_number: str):
         raise HTTPException(500, f"Conversation lookup failed: {str(e)}")
 
 
-@app.post("/api/qa/score")
+@app.post("/api/qa/score", response_model=QAScoreResponse)
 def score_qa(req: QAScoreRequest):
     """
     Score a support interaction using the QA rubric.
-    Uses Claude API when available, falls back to template scoring otherwise.
+    Uses OpenAI API when available, falls back to template scoring otherwise.
+
+    Special handling:
+    - ticket_number="paste": Frontend paste mode. Returns a template-based
+      score since there is no real ticket to evaluate.
     """
     if not ENGINE_AVAILABLE:
         raise HTTPException(503, "Engine not available - cannot score tickets")
+
+    # Handle frontend paste mode: return a template score
+    if req.ticket_number == "paste":
+        logger.info("QA scoring in paste mode — returning template score")
+        result = qa._template_score(
+            {"Ticket_Number": "paste", "Subject": "Pasted transcript"},
+            None,
+        )
+        result = qa._apply_autozero_rules(result)
+        return result
 
     try:
         result = qa.score_ticket(req.ticket_number)
@@ -509,7 +548,7 @@ def get_drafts():
         raise HTTPException(500, f"Get drafts failed: {str(e)}")
 
 
-@app.post("/api/kb/approve/{draft_id}")
+@app.post("/api/kb/approve/{draft_id}", response_model=ApproveResponse)
 def approve_draft(draft_id: str):
     """Approve a KB draft and add it to the retrieval index"""
     if not ENGINE_AVAILABLE:
@@ -537,7 +576,7 @@ def approve_draft(draft_id: str):
         raise HTTPException(500, f"Approve draft failed: {str(e)}")
 
 
-@app.post("/api/kb/reject/{draft_id}")
+@app.post("/api/kb/reject/{draft_id}", response_model=RejectResponse)
 def reject_draft(draft_id: str):
     """Reject a KB draft"""
     if not ENGINE_AVAILABLE:
