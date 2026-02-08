@@ -37,7 +37,7 @@ gap = GapDetector(vs, ds, threshold=0.40)
 setup_time = time.time() - t0
 
 print(f"  Data: {len(ds.documents)} docs")
-print(f"  Index: {vs.tfidf_matrix.shape}")
+print(f"  Index: {vs.embedding_matrix.shape}")
 print(f"  Setup time: {setup_time:.1f}s")
 
 # ========================================================================

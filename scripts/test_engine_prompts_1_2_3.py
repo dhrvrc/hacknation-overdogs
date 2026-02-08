@@ -34,11 +34,11 @@ vs.build_index(ds.documents)
 build_time = time.time() - t0
 
 print(f"  Data loaded: {len(ds.documents)} docs in {load_time:.2f}s")
-print(f"  Index built: {vs.tfidf_matrix.shape} in {build_time:.2f}s")
+print(f"  Index built: {vs.embedding_matrix.shape} in {build_time:.2f}s")
 
 # Assertions for setup
 assert len(ds.documents) == 4321, f"Expected 4321 documents, got {len(ds.documents)}"
-assert vs.tfidf_matrix.shape[0] == 4321, f"Expected 4321 rows, got {vs.tfidf_matrix.shape[0]}"
+assert vs.embedding_matrix.shape[0] == 4321, f"Expected 4321 rows, got {vs.embedding_matrix.shape[0]}"
 
 # ========================================================================
 # TEST 1: Classification accuracy on known queries

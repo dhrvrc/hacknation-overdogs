@@ -31,7 +31,7 @@ vs.build_index(ds.documents)
 prov = ProvenanceResolver(ds)
 
 print(f"  Data: {len(ds.documents)} docs")
-print(f"  Index: {vs.tfidf_matrix.shape}")
+print(f"  Index: {vs.embedding_matrix.shape}")
 print(f"  Provenance resolver ready")
 
 # ========================================================================

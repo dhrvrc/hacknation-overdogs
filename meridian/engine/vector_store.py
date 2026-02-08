@@ -1,18 +1,40 @@
 """
 Meridian Vector Store
-Fast TF-IDF retrieval engine with partitioned search and dynamic indexing.
+ChromaDB-backed embedding retrieval engine with partitioned search and dynamic indexing.
 """
+import hashlib
+import json
 import time
 import logging
+import os
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple, Set
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import openai
+import chromadb
 
 from .data_loader import Document
+from ..config import OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, CHROMADB_PERSIST_DIR
 
 logger = logging.getLogger(__name__)
+
+# OpenAI limits to 300K tokens per request and 8191 tokens per text.
+# Batch size of 250 with truncated texts stays safely under limits.
+_EMBED_BATCH_SIZE = 250
+_MAX_TEXT_CHARS = 8000  # ~2000 tokens, keeps inputs focused
+
+_COLLECTION_NAME = "meridian"
+_CHROMA_ADD_BATCH = 5000  # ChromaDB add batch limit
+
+
+class _EmbeddingMatrixShim:
+    """Backward-compatible shim so external code accessing .embedding_matrix.shape still works."""
+    def __init__(self, rows: int, cols: int):
+        self.shape = (rows, cols)
+        self.dtype = np.float32
+
+    def __repr__(self):
+        return f"ChromaDB({self.shape[0]} docs, {self.shape[1]} dims)"
 
 
 @dataclass
@@ -29,114 +51,205 @@ class RetrievalResult:
 
 
 class VectorStore:
-    """TF-IDF vector store with partitioned retrieval and dynamic indexing."""
+    """ChromaDB embedding vector store with partitioned retrieval and dynamic indexing."""
 
     def __init__(self):
-        self.vectorizer: Optional[TfidfVectorizer] = None
-        self.tfidf_matrix = None  # sparse matrix
+        self.openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        self.embedding_model = OPENAI_EMBEDDING_MODEL
+        self.chroma_client = chromadb.PersistentClient(path=CHROMADB_PERSIST_DIR)
+        self.collection: Optional[chromadb.Collection] = None
         self.documents: List[Document] = []
-        self.doc_index: Dict[str, Document] = {}  # doc_id → Document
-        self.partition_indices: Dict[str, List[int]] = {}  # doc_type → list of row indices
+        self.doc_index: Dict[str, Document] = {}  # doc_id -> Document
         self.is_built = False
+        self._query_cache: Dict[str, np.ndarray] = {}  # text -> embedding vector (in-memory)
+
+    @property
+    def embedding_matrix(self):
+        """Backward-compatible property for code accessing .embedding_matrix.shape"""
+        count = self.collection.count() if self.collection else 0
+        return _EmbeddingMatrixShim(count, EMBEDDING_DIMENSIONS)
+
+    def _embed_texts(self, texts: List[str]) -> np.ndarray:
+        """
+        Batch-embed texts via OpenAI API.
+        Handles chunking for batches > 2048 texts.
+        Returns L2-normalized ndarray of shape (len(texts), dim).
+        """
+        all_embeddings = []
+
+        # Truncate texts to avoid exceeding per-text and per-request token limits
+        texts = [t[:_MAX_TEXT_CHARS] for t in texts]
+
+        for i in range(0, len(texts), _EMBED_BATCH_SIZE):
+            batch = texts[i:i + _EMBED_BATCH_SIZE]
+            response = self.openai_client.embeddings.create(
+                model=self.embedding_model,
+                input=batch
+            )
+            # Sort by index to ensure order matches input
+            sorted_data = sorted(response.data, key=lambda x: x.index)
+            batch_embeddings = [item.embedding for item in sorted_data]
+            all_embeddings.extend(batch_embeddings)
+
+        matrix = np.array(all_embeddings, dtype=np.float32)
+
+        # OpenAI embeddings are already L2-normalized, but verify/ensure
+        norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+        norms[norms == 0] = 1  # avoid division by zero
+        matrix = matrix / norms
+
+        return matrix
+
+    def _embed_query(self, text: str) -> np.ndarray:
+        """
+        Embed a single query string, returning a cached result if available.
+        Returns shape (1, dim) ndarray.
+        """
+        cache_key = text[:_MAX_TEXT_CHARS]
+        if cache_key in self._query_cache:
+            return self._query_cache[cache_key]
+
+        vec = self._embed_texts([text])
+        self._query_cache[cache_key] = vec
+        return vec
+
+    def _compute_fingerprint(self, doc_ids: List[str]) -> str:
+        """Compute a fingerprint of the document set for cache validation."""
+        return hashlib.md5(json.dumps(sorted(doc_ids)).encode()).hexdigest()
 
     def build_index(self, documents: List[Document]) -> None:
         """
-        Fit TF-IDF vectorizer on all documents' search_text.
-        Store the sparse matrix and build partition index maps.
+        Embed all documents' search_text via OpenAI API and store in ChromaDB.
+        Uses ChromaDB persistence to avoid re-embedding if documents haven't changed.
         """
-        logger.info(f"Building TF-IDF index for {len(documents)} documents")
+        logger.info(f"Building embedding index for {len(documents)} documents")
         t0 = time.time()
 
         self.documents = documents
         self.doc_index = {doc.doc_id: doc for doc in documents}
 
-        # Extract search texts
-        search_texts = [doc.search_text for doc in documents]
+        # Compute fingerprint for cache validation
+        doc_ids = [doc.doc_id for doc in documents]
+        fingerprint = self._compute_fingerprint(doc_ids)
 
-        # Build TF-IDF vectorizer
-        self.vectorizer = TfidfVectorizer(
-            max_features=30000,
-            ngram_range=(1, 2),
-            stop_words='english',
-            sublinear_tf=True,
-            dtype=np.float32
+        # Check if collection exists with matching fingerprint
+        existing_names = [c.name for c in self.chroma_client.list_collections()]
+
+        if _COLLECTION_NAME in existing_names:
+            self.collection = self.chroma_client.get_collection(name=_COLLECTION_NAME)
+            existing_fingerprint = self.collection.metadata.get("doc_fingerprint", "")
+            existing_count = self.collection.count()
+
+            if existing_fingerprint == fingerprint and existing_count == len(documents):
+                logger.info("  Loaded embeddings from ChromaDB cache")
+                self.is_built = True
+                elapsed = time.time() - t0
+                logger.info(f"  Index built in {elapsed:.2f}s")
+                logger.info(f"  Collection size: {self.collection.count()} docs, {EMBEDDING_DIMENSIONS} dims")
+                return
+            else:
+                logger.info("  Cache fingerprint mismatch, rebuilding...")
+                self.chroma_client.delete_collection(_COLLECTION_NAME)
+
+        # Create fresh collection
+        self.collection = self.chroma_client.create_collection(
+            name=_COLLECTION_NAME,
+            metadata={
+                "hnsw:space": "cosine",
+                "doc_fingerprint": fingerprint,
+            }
         )
 
-        # Fit and transform
-        self.tfidf_matrix = self.vectorizer.fit_transform(search_texts)
+        # Embed all documents via OpenAI
+        search_texts = [doc.search_text for doc in documents]
+        logger.info(f"  Embedding {len(search_texts)} texts via OpenAI API...")
+        embedding_matrix = self._embed_texts(search_texts)
 
-        # Build partition indices
-        self.partition_indices = {'KB': [], 'SCRIPT': [], 'TICKET': []}
-        for idx, doc in enumerate(documents):
-            if doc.doc_type in self.partition_indices:
-                self.partition_indices[doc.doc_type].append(idx)
+        # Add to ChromaDB in batches
+        for i in range(0, len(documents), _CHROMA_ADD_BATCH):
+            batch_end = min(i + _CHROMA_ADD_BATCH, len(documents))
+            self.collection.add(
+                ids=[doc.doc_id for doc in documents[i:batch_end]],
+                embeddings=embedding_matrix[i:batch_end].tolist(),
+                metadatas=[{"doc_type": doc.doc_type} for doc in documents[i:batch_end]],
+                documents=[doc.search_text for doc in documents[i:batch_end]]
+            )
 
         self.is_built = True
 
         elapsed = time.time() - t0
         logger.info(f"  Index built in {elapsed:.2f}s")
-        logger.info(f"  Matrix shape: {self.tfidf_matrix.shape}")
-        logger.info(f"  Partitions: KB={len(self.partition_indices['KB'])}, "
-                   f"SCRIPT={len(self.partition_indices['SCRIPT'])}, "
-                   f"TICKET={len(self.partition_indices['TICKET'])}")
+        logger.info(f"  Collection size: {self.collection.count()} docs, {EMBEDDING_DIMENSIONS} dims")
+
+        # Count partitions for logging
+        kb_count = sum(1 for d in documents if d.doc_type == 'KB')
+        script_count = sum(1 for d in documents if d.doc_type == 'SCRIPT')
+        ticket_count = sum(1 for d in documents if d.doc_type == 'TICKET')
+        logger.info(f"  Partitions: KB={kb_count}, SCRIPT={script_count}, TICKET={ticket_count}")
 
     def retrieve(
         self,
         query: str,
         top_k: int = 5,
         doc_types: Optional[List[str]] = None,
-        exclude_ids: Optional[Set[str]] = None
+        exclude_ids: Optional[Set[str]] = None,
+        _query_vec: Optional[np.ndarray] = None
     ) -> List[RetrievalResult]:
         """
-        Core retrieval. Transform query, compute cosine similarity
-        against candidates (filtered by doc_types and exclude_ids),
+        Core retrieval via ChromaDB. Embed query, search with metadata filtering,
         return top_k results sorted by score descending.
         """
         if not self.is_built:
             raise RuntimeError("Index not built. Call build_index() first.")
 
-        # Transform query
-        query_vec = self.vectorizer.transform([query])
+        # Embed query (cached)
+        query_vec = _query_vec if _query_vec is not None else self._embed_query(query)
 
-        # Determine candidate indices
+        # Build ChromaDB where clause for doc_type filtering
+        where_clause = None
         if doc_types:
-            candidate_indices = []
-            for dt in doc_types:
-                if dt in self.partition_indices:
-                    candidate_indices.extend(self.partition_indices[dt])
-        else:
-            candidate_indices = list(range(len(self.documents)))
+            if len(doc_types) == 1:
+                where_clause = {"doc_type": doc_types[0]}
+            else:
+                where_clause = {"doc_type": {"$in": doc_types}}
 
-        # Filter out excluded docs
+        # Over-fetch if we need to exclude IDs (post-filter)
+        request_k = top_k
         if exclude_ids:
-            candidate_indices = [
-                idx for idx in candidate_indices
-                if self.documents[idx].doc_id not in exclude_ids
-            ]
+            request_k = top_k + len(exclude_ids)
 
-        if not candidate_indices:
+        # Don't request more than available
+        request_k = min(request_k, self.collection.count())
+        if request_k == 0:
             return []
 
-        # Compute similarities for candidates only
-        candidate_matrix = self.tfidf_matrix[candidate_indices]
-        similarities = cosine_similarity(query_vec, candidate_matrix).flatten()
+        # Query ChromaDB
+        chroma_results = self.collection.query(
+            query_embeddings=[query_vec[0].tolist()],
+            n_results=request_k,
+            where=where_clause,
+            include=["distances"]
+        )
 
-        # Get top-k using argpartition for O(n) complexity
-        if len(similarities) <= top_k:
-            top_indices = np.argsort(-similarities)
-        else:
-            # argpartition gives top-k unsorted, then we sort them
-            partition_idx = np.argpartition(-similarities, top_k)[:top_k]
-            top_indices = partition_idx[np.argsort(-similarities[partition_idx])]
+        result_ids = chroma_results["ids"][0]
+        result_distances = chroma_results["distances"][0]
 
-        # Build results
+        # Build results, applying exclude_ids filter
         results = []
-        for rank, idx in enumerate(top_indices, start=1):
-            doc_idx = candidate_indices[idx]
-            doc = self.documents[doc_idx]
-            score = float(similarities[idx])
+        rank = 1
+        for doc_id, distance in zip(result_ids, result_distances):
+            if exclude_ids and doc_id in exclude_ids:
+                continue
+            if rank > top_k:
+                break
 
-            # Truncate body to 2000 chars
+            doc = self.doc_index.get(doc_id)
+            if doc is None:
+                continue
+
+            # Convert cosine distance to cosine similarity
+            score = 1.0 - distance
+
             body = doc.body[:2000] if len(doc.body) > 2000 else doc.body
 
             result = RetrievalResult(
@@ -150,6 +263,7 @@ class VectorStore:
                 rank=rank
             )
             results.append(result)
+            rank += 1
 
         return results
 
@@ -163,12 +277,14 @@ class VectorStore:
         Returns {"KB": [...], "SCRIPT": [...], "TICKET": [...]}.
         Used by the query router to compare cross-partition relevance.
         """
+        query_vec = self._embed_query(query)
         results = {}
         for doc_type in ['KB', 'SCRIPT', 'TICKET']:
             partition_results = self.retrieve(
                 query=query,
                 top_k=top_k_per,
-                doc_types=[doc_type]
+                doc_types=[doc_type],
+                _query_vec=query_vec
             )
             results[doc_type] = partition_results
         return results
@@ -185,52 +301,68 @@ class VectorStore:
         if not self.is_built:
             raise RuntimeError("Index not built. Call build_index() first.")
 
-        # Transform text
-        text_vec = self.vectorizer.transform([text])
+        # Embed text (cached)
+        text_vec = self._embed_query(text)
 
-        # Determine candidate indices
+        # Build where clause
+        where_clause = None
         if doc_types:
-            candidate_indices = []
-            for dt in doc_types:
-                if dt in self.partition_indices:
-                    candidate_indices.extend(self.partition_indices[dt])
-        else:
-            candidate_indices = list(range(len(self.documents)))
+            if len(doc_types) == 1:
+                where_clause = {"doc_type": doc_types[0]}
+            else:
+                where_clause = {"doc_type": {"$in": doc_types}}
 
-        if not candidate_indices:
+        # Query for top-1
+        chroma_results = self.collection.query(
+            query_embeddings=[text_vec[0].tolist()],
+            n_results=1,
+            where=where_clause,
+            include=["distances"]
+        )
+
+        if not chroma_results["ids"][0]:
             return 0.0, ""
 
-        # Compute similarities
-        candidate_matrix = self.tfidf_matrix[candidate_indices]
-        similarities = cosine_similarity(text_vec, candidate_matrix).flatten()
-
-        # Find max
-        max_idx = np.argmax(similarities)
-        max_score = float(similarities[max_idx])
-        best_doc_idx = candidate_indices[max_idx]
-        best_doc_id = self.documents[best_doc_idx].doc_id
+        best_doc_id = chroma_results["ids"][0][0]
+        best_distance = chroma_results["distances"][0][0]
+        max_score = 1.0 - best_distance
 
         return max_score, best_doc_id
 
     def remove_documents(self, doc_ids: Set[str]) -> None:
-        """Filter out documents by ID and rebuild the index from scratch."""
-        logger.info(f"Removing {len(doc_ids)} documents and rebuilding index")
+        """Remove documents by ID from ChromaDB and in-memory structures."""
+        logger.info(f"Removing {len(doc_ids)} documents from index")
 
-        # Filter documents
-        remaining_docs = [doc for doc in self.documents if doc.doc_id not in doc_ids]
+        # Remove from ChromaDB
+        ids_to_remove = list(doc_ids)
+        for i in range(0, len(ids_to_remove), _CHROMA_ADD_BATCH):
+            batch = ids_to_remove[i:i + _CHROMA_ADD_BATCH]
+            self.collection.delete(ids=batch)
 
-        # Rebuild from scratch
-        self.build_index(remaining_docs)
+        # Update in-memory structures
+        self.documents = [doc for doc in self.documents if doc.doc_id not in doc_ids]
+        self.doc_index = {doc.doc_id: doc for doc in self.documents}
 
     def add_documents(self, new_docs: List[Document]) -> None:
-        """Append new documents and rebuild the index from scratch."""
-        logger.info(f"Adding {len(new_docs)} documents and rebuilding index")
+        """Append new documents. Only embeds the new docs, not the full corpus."""
+        logger.info(f"Adding {len(new_docs)} documents to index")
 
-        # Merge documents
-        all_docs = self.documents + new_docs
+        # Embed only the new documents
+        new_texts = [doc.search_text for doc in new_docs]
+        new_embeddings = self._embed_texts(new_texts)
 
-        # Rebuild from scratch
-        self.build_index(all_docs)
+        # Add to ChromaDB
+        self.collection.add(
+            ids=[doc.doc_id for doc in new_docs],
+            embeddings=new_embeddings.tolist(),
+            metadatas=[{"doc_type": doc.doc_type} for doc in new_docs],
+            documents=[doc.search_text for doc in new_docs]
+        )
+
+        # Update in-memory structures
+        self.documents.extend(new_docs)
+        for doc in new_docs:
+            self.doc_index[doc.doc_id] = doc
 
     def get_document(self, doc_id: str) -> Optional[Document]:
         """O(1) lookup by doc_id."""
@@ -248,7 +380,6 @@ if __name__ == "__main__":
         from meridian.config import DATA_PATH
         path = sys.argv[1] if len(sys.argv) > 1 else DATA_PATH
     except ImportError:
-        import os
         path = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("MERIDIAN_DATA", "SupportMind_Final_Data.xlsx")
 
     print("\n" + "=" * 70)
@@ -270,9 +401,7 @@ if __name__ == "__main__":
     print("BUILD RESULTS")
     print("=" * 70)
     print(f"Build time: {build_time:.2f}s")
-    print(f"Matrix shape: {vs.tfidf_matrix.shape}")
-    print(f"Matrix dtype: {vs.tfidf_matrix.dtype}")
-    print(f"Matrix sparsity: {1 - vs.tfidf_matrix.nnz / (vs.tfidf_matrix.shape[0] * vs.tfidf_matrix.shape[1]):.4f}")
+    print(f"Collection: {vs.embedding_matrix}")
 
     # Test retrieval
     print("\n" + "=" * 70)
@@ -296,7 +425,6 @@ if __name__ == "__main__":
     for r in results:
         print(f"    {r.rank}. {r.doc_id} ({r.doc_type}) - score={r.score:.4f}")
         print(f"       {r.title[:60]}...")
-    # Check if KB-3FFBFE3C70 appears (it should be the best match)
     has_time_worked = any("time worked" in r.title.lower() or "3FFBFE3C70" in r.doc_id for r in results)
     print(f"  [{'OK' if has_time_worked else 'WARN'}] Contains 'Time Worked' result: {has_time_worked}")
 

@@ -15,5 +15,8 @@ openpyxl
 numpy
 scikit-learn
 
+# Vector Database
+chromadb
+
 # LLM Integration (optional - for QA scoring and KB generation)
 openai

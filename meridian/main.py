@@ -140,7 +140,7 @@ if __name__ == "__main__":
         print(f"  KB: {sum(1 for d in ds.documents if d.doc_type=='KB')}")
         print(f"  SCRIPT: {sum(1 for d in ds.documents if d.doc_type=='SCRIPT')}")
         print(f"  TICKET: {sum(1 for d in ds.documents if d.doc_type=='TICKET')}")
-        print(f"\nVector store: {vs.tfidf_matrix.shape}")
+        print(f"\nVector store: {vs.embedding_matrix.shape}")
         print(f"Provenance resolver: Ready")
         print(f"Gap detector: threshold={gap.threshold}")
         print(f"KB generator: {gen.generation_method if hasattr(gen, 'generation_method') else 'template'} mode")

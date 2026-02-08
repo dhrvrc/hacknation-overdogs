@@ -37,7 +37,7 @@ TICKET_SIGNALS = [
 ]
 
 
-def classify_query(query: str, vector_store: VectorStore) -> Tuple[str, Dict[str, float]]:
+def classify_query(query: str, vector_store: VectorStore, _query_vec=None) -> Tuple[str, Dict[str, float]]:
     """
     Classify a query as SCRIPT, KB, or TICKET_RESOLUTION.
 
@@ -67,8 +67,16 @@ def classify_query(query: str, vector_store: VectorStore) -> Tuple[str, Dict[str
     ticket_hits = sum(1 for signal in TICKET_SIGNALS if signal in query_lower)
     keyword_scores['TICKET'] = min(ticket_hits / 3.0, 1.0)
 
-    # Step 3-4: Retrieval scoring
-    partition_results = vector_store.retrieve_by_partitions(query, top_k_per=1)
+    # Step 3-4: Retrieval scoring (reuse pre-computed query vector if available)
+    if _query_vec is None:
+        _query_vec = vector_store._embed_query(query)
+
+    results = {}
+    for doc_type in ['KB', 'SCRIPT', 'TICKET']:
+        results[doc_type] = vector_store.retrieve(
+            query=query, top_k=1, doc_types=[doc_type], _query_vec=_query_vec
+        )
+    partition_results = results
 
     retrieval_scores = {}
     for doc_type in ['SCRIPT', 'KB', 'TICKET']:
@@ -123,14 +131,18 @@ def route_and_retrieve(
             }
         }
     """
+    # Embed query once and reuse across all retrieval calls
+    query_vec = vector_store._embed_query(query)
+
     # Classify
-    predicted_type, confidence_scores = classify_query(query, vector_store)
+    predicted_type, confidence_scores = classify_query(query, vector_store, _query_vec=query_vec)
 
     # Primary retrieval (top_k from predicted type)
     primary_results = vector_store.retrieve(
         query=query,
         top_k=top_k,
-        doc_types=[predicted_type]
+        doc_types=[predicted_type],
+        _query_vec=query_vec
     )
 
     # Secondary retrieval (top_2 from each OTHER type)
@@ -142,7 +154,8 @@ def route_and_retrieve(
         results = vector_store.retrieve(
             query=query,
             top_k=2,
-            doc_types=[doc_type]
+            doc_types=[doc_type],
+            _query_vec=query_vec
         )
         secondary_results[doc_type] = results
 

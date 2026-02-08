@@ -28,7 +28,7 @@ vs = VectorStore()
 t0 = time.time()
 vs.build_index(ds.documents)
 print(f"  [OK] Built index in {time.time()-t0:.2f}s")
-print(f"  [OK] Matrix shape: {vs.tfidf_matrix.shape}")
+print(f"  [OK] Matrix shape: {vs.embedding_matrix.shape}")
 
 # Test 3: Search for scripts
 print("\n[Test 3] Searching for scripts...")

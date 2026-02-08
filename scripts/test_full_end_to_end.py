@@ -87,21 +87,21 @@ log_test(
     f"{total_docs} docs ({kb_count} KB + {script_count} SCRIPT + {ticket_count} TICKET) in {load_time:.1f}s"
 )
 
-print("\n[2/7] Building TF-IDF vector store...")
+print("\n[2/7] Building embedding vector store...")
 t0 = time.time()
 vs = VectorStore()
 vs.build_index(ds.documents)
 index_time = time.time() - t0
 
 # Test 2: Vector store indexing
-matrix_shape = vs.tfidf_matrix.shape
+matrix_shape = vs.embedding_matrix.shape
 assert matrix_shape[0] == total_docs, f"Matrix rows should match doc count"
-assert matrix_shape[1] <= 30000, f"Max features should be 30000"
+assert matrix_shape[1] == 3072, f"Embedding dimensions should be 3072, got {matrix_shape[1]}"
 
 log_test(
     "Vector store indexing",
     True,
-    f"TF-IDF matrix {matrix_shape} built in {index_time:.1f}s"
+    f"Embedding matrix {matrix_shape} built in {index_time:.1f}s"
 )
 
 print("\n[3/7] Initializing provenance resolver...")
@@ -352,9 +352,9 @@ log_test(
 print("\n[4/4] Adding approved KB to vector store...")
 
 # Test 14: Add to vector store
-initial_doc_count = vs.tfidf_matrix.shape[0]
+initial_doc_count = vs.embedding_matrix.shape[0]
 vs.add_documents([approved_doc])
-new_doc_count = vs.tfidf_matrix.shape[0]
+new_doc_count = vs.embedding_matrix.shape[0]
 
 assert new_doc_count == initial_doc_count + 1, "Document count should increase by 1"
 

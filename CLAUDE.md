@@ -18,7 +18,7 @@ The project is split into three major components, designed for a 3-person team:
 
 ### Person 1: Backend Intelligence Engine (`meridian/engine/`)
 - **data_loader.py**: Loads dataset (10 Excel tabs), builds unified document corpus (4,321 docs: 3,207 KB + 714 scripts + 400 tickets)
-- **vector_store.py**: TF-IDF retrieval engine with partitioned search (KB/SCRIPT/TICKET)
+- **vector_store.py**: ChromaDB-backed embedding retrieval engine with partitioned search (KB/SCRIPT/TICKET)
 - **query_router.py**: Hybrid classifier (keyword + retrieval) routes queries to correct document type
 - **provenance.py**: Resolves evidence chains linking KB articles → Tickets → Conversations → Scripts
 - **gap_detector.py**: Detects knowledge gaps by comparing ticket resolutions against KB corpus
@@ -106,10 +106,12 @@ Synthetic KB articles have exactly 3 lineage records:
 - **Classification accuracy**: routing to correct document type
 - **Before/after learning loop**: Proof that adding synthetic KB articles improves retrieval (remove 161 learned articles, re-run eval, restore, compare)
 
-### TF-IDF Configuration
-- max_features=30000, ngram_range=(1,2), stop_words="english", sublinear_tf=True
+### Embedding Configuration
+- Model: `text-embedding-3-large` (3072 dimensions, L2-normalized)
+- Cosine similarity via dot product (embeddings are unit-length)
 - Partitioned indices for targeted retrieval by doc_type
 - Dynamic index mutation for before/after comparisons
+- Embedding persistence: ChromaDB PersistentClient (`.chromadb_store/` directory) for fast restarts
 
 ## Demo Strategy
 
@@ -136,7 +138,7 @@ Required environment variables:
 - **Don't modify join keys or IDs**: All foreign keys resolve perfectly in the dataset
 - **Don't skip provenance**: It's the differentiator - every recommendation needs evidence tracing
 - **Don't fake the learning loop**: The before/after eval must use actual index mutation, not simulated numbers
-- **Don't use dense embeddings**: This is TF-IDF only (works offline, no API dependencies for retrieval)
+- **Don't remove the ChromaDB store**: `.chromadb_store/` directory prevents re-embedding 4,321 docs on every boot
 - **Don't create new KB article formats**: Match the exact structure of synthetic articles in the dataset
 
 ## Performance Targets
