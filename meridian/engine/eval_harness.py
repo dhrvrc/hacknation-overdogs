@@ -168,18 +168,21 @@ class EvalHarness:
             question_text = question['Question_Text']
             actual_type = question['Answer_Type']
 
+            # Normalize TICKET_RESOLUTION to TICKET (our classifier only predicts SCRIPT/KB/TICKET)
+            actual_type_normalized = "TICKET" if actual_type == "TICKET_RESOLUTION" else actual_type
+
             # Classify
             predicted_type, _ = self.router.classify_query(question_text, self.vs)
 
             # Track
             predictions.append(predicted_type)
-            actuals.append(actual_type)
+            actuals.append(actual_type_normalized)
 
-            if predicted_type == actual_type:
+            if predicted_type == actual_type_normalized:
                 correct += 1
 
             # Update confusion matrix
-            actual_key = f"actual_{actual_type}"
+            actual_key = f"actual_{actual_type_normalized}"
             pred_key = f"pred_{predicted_type}"
             confusion[actual_key][pred_key] += 1
 
