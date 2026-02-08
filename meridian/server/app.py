@@ -192,7 +192,8 @@ def get_stub_dashboard_stats() -> dict:
             "articles_with_metadata": 0,
             "articles_without_metadata": 0,
             "avg_body_length": 0,
-            "scripts_total": 0
+            "scripts_total": 0,
+            "placeholders_total": 0
         },
         "learning_pipeline": {
             "total_events": 0,
@@ -401,6 +402,12 @@ def get_dashboard():
         # Eval results (use cached if available)
         eval_results = CACHED_EVAL_RESULTS
 
+        # Count scripts with placeholders (contain <PLACEHOLDER> or {{ patterns)
+        placeholders_total = sum(
+            1 for d in ds.documents
+            if d.doc_type == "SCRIPT" and ("<" in d.body and ">" in d.body)
+        )
+
         return {
             "knowledge_health": {
                 "total_articles": total_articles,
@@ -409,7 +416,8 @@ def get_dashboard():
                 "articles_with_metadata": articles_with_metadata,
                 "articles_without_metadata": total_articles - articles_with_metadata,
                 "avg_body_length": avg_body_length,
-                "scripts_total": scripts_total
+                "scripts_total": scripts_total,
+                "placeholders_total": placeholders_total
             },
             "learning_pipeline": {
                 "total_events": total_events,

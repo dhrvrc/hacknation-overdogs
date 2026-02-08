@@ -4,10 +4,10 @@ import { motion } from "framer-motion";
 import { easeOut } from "@/lib/utils";
 import CopilotPanel from "@/components/copilot/CopilotPanel";
 import LiveChannelPanel from "@/components/copilot/LiveChannelPanel";
-import { useCopilotSimulation } from "@/hooks/useCopilotSimulation";
+import { useCopilot } from "@/hooks/useCopilot";
 
 export default function CopilotView() {
-  const [state, actions] = useCopilotSimulation();
+  const [state, actions] = useCopilot();
 
   return (
     <motion.div

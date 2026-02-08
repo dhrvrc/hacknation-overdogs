@@ -80,7 +80,16 @@ export default function DashboardView() {
         </BentoCell>
 
         <BentoCell span={8} index={1}>
-          <EvalResults data={data.eval_results} />
+          {data.eval_results ? (
+            <EvalResults data={data.eval_results} />
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-sm font-medium text-foreground">Evaluation Not Run</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Run the evaluation harness to see retrieval and classification metrics
+              </p>
+            </div>
+          )}
         </BentoCell>
       </BentoGrid>
 

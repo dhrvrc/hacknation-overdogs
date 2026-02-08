@@ -3,7 +3,7 @@
 // Flip USE_MOCK to false when Person 3's FastAPI is ready.
 // ============================================================
 
-const USE_MOCK = true;
+const USE_MOCK = false;
 const API_BASE = "http://localhost:8000";
 
 import {
@@ -42,6 +42,20 @@ export async function getProvenance(docId: string) {
 export async function getDashboard() {
   if (USE_MOCK) return mockDashboard;
   const res = await fetch(`${API_BASE}/api/dashboard/stats`);
+  return res.json();
+}
+
+/** GET /api/gap/emerging — emerging issues clusters */
+export async function getEmergingIssues() {
+  if (USE_MOCK) return mockDashboard.emerging_issues;
+  const res = await fetch(`${API_BASE}/api/gap/emerging`);
+  return res.json();
+}
+
+/** GET /api/kb/drafts — pending KB drafts */
+export async function getDrafts() {
+  if (USE_MOCK) return mockDashboard.learning_pipeline.pending_drafts;
+  const res = await fetch(`${API_BASE}/api/kb/drafts`);
   return res.json();
 }
 

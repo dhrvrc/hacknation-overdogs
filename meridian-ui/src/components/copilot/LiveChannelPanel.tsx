@@ -73,11 +73,10 @@ function ChannelTabs({
           <button
             key={tab.id}
             onClick={() => setMode(tab.id)}
-            className={`relative flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-              isActive
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            className={`relative flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${isActive
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+              }`}
           >
             {tab.icon}
             {tab.label}
@@ -231,10 +230,10 @@ export default function LiveChannelPanel({
                   </svg>
                 </div>
                 <p className="mt-3 text-sm font-medium text-foreground">
-                  No Active Conversation
+                  Ready for Inquiry
                 </p>
                 <p className="mt-1 max-w-[240px] text-xs text-muted-foreground">
-                  Select a scenario from the dropdown above to simulate a customer interaction.
+                  Type a customer query or issue description below to trigger the Copilot.
                 </p>
               </div>
             ) : (
@@ -284,7 +283,7 @@ export default function LiveChannelPanel({
       </div>
 
       {/* Suggested reply chips + Compose bar */}
-      {scenario && channelMode === "chat" && (
+      {channelMode === "chat" && (
         <div className="border-t border-border">
           {/* Suggested replies */}
           <AnimatePresence>
@@ -361,24 +360,21 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       className={`flex ${isAgent ? "justify-end" : "justify-start"}`}
     >
       <div
-        className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 ${
-          isAgent
-            ? "rounded-br-md bg-foreground text-background"
-            : "rounded-bl-md border border-border bg-card text-foreground"
-        }`}
+        className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 ${isAgent
+          ? "rounded-br-md bg-foreground text-background"
+          : "rounded-bl-md border border-border bg-card text-foreground"
+          }`}
       >
         <div className="flex items-center gap-1.5">
           <span
-            className={`text-[10px] font-semibold ${
-              isAgent ? "text-background/70" : "text-muted-foreground"
-            }`}
+            className={`text-[10px] font-semibold ${isAgent ? "text-background/70" : "text-muted-foreground"
+              }`}
           >
             {message.name}
           </span>
           <span
-            className={`text-[9px] ${
-              isAgent ? "text-background/50" : "text-muted-foreground/60"
-            }`}
+            className={`text-[9px] ${isAgent ? "text-background/50" : "text-muted-foreground/60"
+              }`}
           >
             {message.timestamp}
           </span>

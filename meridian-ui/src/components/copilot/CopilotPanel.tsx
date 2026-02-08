@@ -121,7 +121,7 @@ export default function CopilotPanel({
               Copilot Ready
             </p>
             <p className="mt-1 max-w-[200px] text-xs text-muted-foreground">
-              Select a scenario from the channel panel to see the AI copilot in action.
+              Type a message or query in the chat to start the Co-pilot.
             </p>
           </div>
         ) : (
