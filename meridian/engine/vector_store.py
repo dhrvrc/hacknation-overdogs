@@ -1,6 +1,7 @@
 """
 Meridian Vector Store
 ChromaDB-backed embedding retrieval engine with partitioned search and dynamic indexing.
+Uses separate collections per doc_type for isolated HNSW indices.
 """
 import hashlib
 import json
@@ -25,7 +26,12 @@ logger = logging.getLogger(__name__)
 _EMBED_BATCH_SIZE = 250
 _MAX_TEXT_CHARS = 8000  # ~2000 tokens, keeps inputs focused
 
-_COLLECTION_NAME = "meridian"
+# Separate collection per doc_type for isolated HNSW indices
+_COLLECTION_NAMES = {
+    "KB": "meridian_kb",
+    "SCRIPT": "meridian_script",
+    "TICKET": "meridian_ticket",
+}
 _CHROMA_ADD_BATCH = 5000  # ChromaDB add batch limit
 
 
@@ -59,10 +65,11 @@ class VectorStore:
         self.openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
         self.embedding_model = OPENAI_EMBEDDING_MODEL
         self.chroma_client = chromadb.PersistentClient(path=CHROMADB_PERSIST_DIR)
-        self.collection: Optional[chromadb.Collection] = None
+        self.collections: Dict[str, chromadb.Collection] = {}  # doc_type -> Collection
         self.documents: List[Document] = []
         self.doc_index: Dict[str, Document] = {}  # doc_id -> Document
         self.is_built = False
+        self._excluded_ids: Set[str] = set()  # virtual exclusion set (avoids ChromaDB delete bugs)
         self._query_cache: Dict[str, np.ndarray] = {}  # text -> embedding vector
         self._query_cache_dirty = 0  # count of unsaved entries
         self._load_query_cache()
@@ -70,7 +77,7 @@ class VectorStore:
     @property
     def embedding_matrix(self):
         """Backward-compatible property for code accessing .embedding_matrix.shape"""
-        count = self.collection.count() if self.collection else 0
+        count = sum(c.count() for c in self.collections.values()) if self.collections else 0
         return _EmbeddingMatrixShim(count, EMBEDDING_DIMENSIONS)
 
     def _load_query_cache(self):
@@ -161,13 +168,62 @@ class VectorStore:
             self._query_cache_dirty = 0
         return vec
 
-    def _compute_fingerprint(self, doc_ids: List[str]) -> str:
-        """Compute a fingerprint of the document set for cache validation."""
-        return hashlib.md5(json.dumps(sorted(doc_ids)).encode()).hexdigest()
+    def _compute_fingerprint(self, documents: List[Document]) -> str:
+        """Compute a fingerprint of the document set AND content for cache validation."""
+        # Include both IDs and search_text so content changes invalidate cache
+        payload = [(doc.doc_id, doc.search_text[:200]) for doc in sorted(documents, key=lambda d: d.doc_id)]
+        return hashlib.md5(json.dumps(payload).encode()).hexdigest()
+
+    def _build_collection(self, doc_type: str, docs: List[Document]) -> chromadb.Collection:
+        """Build or load a single per-type collection."""
+        col_name = _COLLECTION_NAMES[doc_type]
+        fingerprint = self._compute_fingerprint(docs)
+
+        existing_names = [c.name for c in self.chroma_client.list_collections()]
+
+        if col_name in existing_names:
+            collection = self.chroma_client.get_collection(name=col_name)
+            existing_fp = collection.metadata.get("doc_fingerprint", "")
+            existing_count = collection.count()
+
+            if existing_fp == fingerprint and existing_count == len(docs):
+                logger.info(f"  [{doc_type}] Loaded {existing_count} docs from cache")
+                return collection
+            else:
+                logger.info(f"  [{doc_type}] Cache mismatch, rebuilding...")
+                self.chroma_client.delete_collection(col_name)
+
+        # Create fresh collection
+        collection = self.chroma_client.create_collection(
+            name=col_name,
+            metadata={
+                "hnsw:space": "cosine",
+                "doc_fingerprint": fingerprint,
+            }
+        )
+
+        # Embed documents
+        search_texts = [doc.search_text for doc in docs]
+        logger.info(f"  [{doc_type}] Embedding {len(search_texts)} texts via OpenAI API...")
+        embedding_matrix = self._embed_texts(search_texts)
+
+        # Add to ChromaDB in batches
+        for i in range(0, len(docs), _CHROMA_ADD_BATCH):
+            batch_end = min(i + _CHROMA_ADD_BATCH, len(docs))
+            collection.add(
+                ids=[doc.doc_id for doc in docs[i:batch_end]],
+                embeddings=embedding_matrix[i:batch_end].tolist(),
+                metadatas=[{"doc_type": doc.doc_type} for doc in docs[i:batch_end]],
+                documents=[doc.search_text for doc in docs[i:batch_end]]
+            )
+
+        logger.info(f"  [{doc_type}] Built: {collection.count()} docs")
+        return collection
 
     def build_index(self, documents: List[Document]) -> None:
         """
         Embed all documents' search_text via OpenAI API and store in ChromaDB.
+        Uses separate collections per doc_type for isolated HNSW indices.
         Uses ChromaDB persistence to avoid re-embedding if documents haven't changed.
         """
         logger.info(f"Building embedding index for {len(documents)} documents")
@@ -176,64 +232,30 @@ class VectorStore:
         self.documents = documents
         self.doc_index = {doc.doc_id: doc for doc in documents}
 
-        # Compute fingerprint for cache validation
-        doc_ids = [doc.doc_id for doc in documents]
-        fingerprint = self._compute_fingerprint(doc_ids)
-
-        # Check if collection exists with matching fingerprint
+        # Clean up legacy single collection if it exists
         existing_names = [c.name for c in self.chroma_client.list_collections()]
+        if "meridian" in existing_names:
+            logger.info("  Removing legacy single collection 'meridian'...")
+            self.chroma_client.delete_collection("meridian")
 
-        if _COLLECTION_NAME in existing_names:
-            self.collection = self.chroma_client.get_collection(name=_COLLECTION_NAME)
-            existing_fingerprint = self.collection.metadata.get("doc_fingerprint", "")
-            existing_count = self.collection.count()
+        # Group documents by type
+        docs_by_type: Dict[str, List[Document]] = {"KB": [], "SCRIPT": [], "TICKET": []}
+        for doc in documents:
+            docs_by_type[doc.doc_type].append(doc)
 
-            if existing_fingerprint == fingerprint and existing_count == len(documents):
-                logger.info("  Loaded embeddings from ChromaDB cache")
-                self.is_built = True
-                elapsed = time.time() - t0
-                logger.info(f"  Index built in {elapsed:.2f}s")
-                logger.info(f"  Collection size: {self.collection.count()} docs, {EMBEDDING_DIMENSIONS} dims")
-                return
-            else:
-                logger.info("  Cache fingerprint mismatch, rebuilding...")
-                self.chroma_client.delete_collection(_COLLECTION_NAME)
-
-        # Create fresh collection
-        self.collection = self.chroma_client.create_collection(
-            name=_COLLECTION_NAME,
-            metadata={
-                "hnsw:space": "cosine",
-                "doc_fingerprint": fingerprint,
-            }
-        )
-
-        # Embed all documents via OpenAI
-        search_texts = [doc.search_text for doc in documents]
-        logger.info(f"  Embedding {len(search_texts)} texts via OpenAI API...")
-        embedding_matrix = self._embed_texts(search_texts)
-
-        # Add to ChromaDB in batches
-        for i in range(0, len(documents), _CHROMA_ADD_BATCH):
-            batch_end = min(i + _CHROMA_ADD_BATCH, len(documents))
-            self.collection.add(
-                ids=[doc.doc_id for doc in documents[i:batch_end]],
-                embeddings=embedding_matrix[i:batch_end].tolist(),
-                metadatas=[{"doc_type": doc.doc_type} for doc in documents[i:batch_end]],
-                documents=[doc.search_text for doc in documents[i:batch_end]]
-            )
+        # Build each collection independently
+        for doc_type, docs in docs_by_type.items():
+            if docs:
+                self.collections[doc_type] = self._build_collection(doc_type, docs)
 
         self.is_built = True
 
         elapsed = time.time() - t0
         logger.info(f"  Index built in {elapsed:.2f}s")
-        logger.info(f"  Collection size: {self.collection.count()} docs, {EMBEDDING_DIMENSIONS} dims")
-
-        # Count partitions for logging
-        kb_count = sum(1 for d in documents if d.doc_type == 'KB')
-        script_count = sum(1 for d in documents if d.doc_type == 'SCRIPT')
-        ticket_count = sum(1 for d in documents if d.doc_type == 'TICKET')
-        logger.info(f"  Partitions: KB={kb_count}, SCRIPT={script_count}, TICKET={ticket_count}")
+        total = sum(c.count() for c in self.collections.values())
+        logger.info(f"  Total: {total} docs, {EMBEDDING_DIMENSIONS} dims")
+        for doc_type, col in self.collections.items():
+            logger.info(f"  {doc_type}: {col.count()} docs")
 
     def retrieve(
         self,
@@ -244,7 +266,7 @@ class VectorStore:
         _query_vec: Optional[np.ndarray] = None
     ) -> List[RetrievalResult]:
         """
-        Core retrieval via ChromaDB. Embed query, search with metadata filtering,
+        Core retrieval via ChromaDB. Embed query, search per-type collections,
         return top_k results sorted by score descending.
         """
         if not self.is_built:
@@ -253,40 +275,42 @@ class VectorStore:
         # Embed query (cached)
         query_vec = _query_vec if _query_vec is not None else self._embed_query(query)
 
-        # Build ChromaDB where clause for doc_type filtering
-        where_clause = None
-        if doc_types:
-            if len(doc_types) == 1:
-                where_clause = {"doc_type": doc_types[0]}
-            else:
-                where_clause = {"doc_type": {"$in": doc_types}}
+        # Determine which collections to query
+        target_types = doc_types if doc_types else list(self.collections.keys())
 
-        # Over-fetch if we need to exclude IDs (post-filter)
-        request_k = top_k
-        if exclude_ids:
-            request_k = top_k + len(exclude_ids)
+        # Merge caller exclusions with virtual exclusions
+        all_exclude = (exclude_ids or set()) | self._excluded_ids
 
-        # Don't request more than available
-        request_k = min(request_k, self.collection.count())
-        if request_k == 0:
-            return []
+        # Gather candidates from all target collections
+        candidates: List[Tuple[str, float]] = []  # (doc_id, distance)
+        for dtype in target_types:
+            col = self.collections.get(dtype)
+            if col is None or col.count() == 0:
+                continue
 
-        # Query ChromaDB
-        chroma_results = self.collection.query(
-            query_embeddings=[query_vec[0].tolist()],
-            n_results=request_k,
-            where=where_clause,
-            include=["distances"]
-        )
+            # Over-fetch to compensate for exclusion filtering
+            request_k = top_k + len(all_exclude) if all_exclude else top_k
+            request_k = min(request_k, col.count())
+            if request_k == 0:
+                continue
 
-        result_ids = chroma_results["ids"][0]
-        result_distances = chroma_results["distances"][0]
+            chroma_results = col.query(
+                query_embeddings=[query_vec[0].tolist()],
+                n_results=request_k,
+                include=["distances"]
+            )
 
-        # Build results, applying exclude_ids filter
+            for doc_id, distance in zip(chroma_results["ids"][0], chroma_results["distances"][0]):
+                candidates.append((doc_id, distance))
+
+        # Sort by distance ascending (lower = more similar for cosine)
+        candidates.sort(key=lambda x: x[1])
+
+        # Build results, applying exclusions
         results = []
         rank = 1
-        for doc_id, distance in zip(result_ids, result_distances):
-            if exclude_ids and doc_id in exclude_ids:
+        for doc_id, distance in candidates:
+            if all_exclude and doc_id in all_exclude:
                 continue
             if rank > top_k:
                 break
@@ -352,60 +376,88 @@ class VectorStore:
         # Embed text (cached)
         text_vec = self._embed_query(text)
 
-        # Build where clause
-        where_clause = None
-        if doc_types:
-            if len(doc_types) == 1:
-                where_clause = {"doc_type": doc_types[0]}
-            else:
-                where_clause = {"doc_type": {"$in": doc_types}}
+        target_types = doc_types if doc_types else list(self.collections.keys())
 
-        # Query for top-1
-        chroma_results = self.collection.query(
-            query_embeddings=[text_vec[0].tolist()],
-            n_results=1,
-            where=where_clause,
-            include=["distances"]
-        )
+        best_doc_id = ""
+        best_distance = 2.0  # max cosine distance
 
-        if not chroma_results["ids"][0]:
+        for dtype in target_types:
+            col = self.collections.get(dtype)
+            if col is None or col.count() == 0:
+                continue
+
+            # Over-fetch if we have virtual exclusions to filter out
+            n_fetch = 1 + len(self._excluded_ids) if self._excluded_ids else 1
+            n_fetch = min(n_fetch, col.count())
+            if n_fetch == 0:
+                continue
+
+            chroma_results = col.query(
+                query_embeddings=[text_vec[0].tolist()],
+                n_results=n_fetch,
+                include=["distances"]
+            )
+
+            if not chroma_results["ids"][0]:
+                continue
+
+            # Find best non-excluded result
+            for doc_id, distance in zip(chroma_results["ids"][0], chroma_results["distances"][0]):
+                if doc_id not in self._excluded_ids and distance < best_distance:
+                    best_doc_id = doc_id
+                    best_distance = distance
+
+        if not best_doc_id:
             return 0.0, ""
-
-        best_doc_id = chroma_results["ids"][0][0]
-        best_distance = chroma_results["distances"][0][0]
         max_score = 1.0 - best_distance
 
         return max_score, best_doc_id
 
     def remove_documents(self, doc_ids: Set[str]) -> None:
-        """Remove documents by ID from ChromaDB and in-memory structures."""
+        """Virtually remove documents by adding to exclusion set.
+
+        Uses virtual exclusion instead of ChromaDB delete to avoid
+        PersistentClient corruption bugs on delete operations.
+        """
         logger.info(f"Removing {len(doc_ids)} documents from index")
 
-        # Remove from ChromaDB
-        ids_to_remove = list(doc_ids)
-        for i in range(0, len(ids_to_remove), _CHROMA_ADD_BATCH):
-            batch = ids_to_remove[i:i + _CHROMA_ADD_BATCH]
-            self.collection.delete(ids=batch)
+        self._excluded_ids |= doc_ids
 
         # Update in-memory structures
         self.documents = [doc for doc in self.documents if doc.doc_id not in doc_ids]
         self.doc_index = {doc.doc_id: doc for doc in self.documents}
 
     def add_documents(self, new_docs: List[Document]) -> None:
-        """Append new documents. Only embeds the new docs, not the full corpus."""
+        """Append new documents. Restores virtually-excluded docs or embeds truly new ones."""
         logger.info(f"Adding {len(new_docs)} documents to index")
 
-        # Embed only the new documents
-        new_texts = [doc.search_text for doc in new_docs]
-        new_embeddings = self._embed_texts(new_texts)
+        # Separate restored (previously excluded) vs truly new docs
+        restored = [doc for doc in new_docs if doc.doc_id in self._excluded_ids]
+        truly_new = [doc for doc in new_docs if doc.doc_id not in self._excluded_ids]
 
-        # Add to ChromaDB
-        self.collection.add(
-            ids=[doc.doc_id for doc in new_docs],
-            embeddings=new_embeddings.tolist(),
-            metadatas=[{"doc_type": doc.doc_type} for doc in new_docs],
-            documents=[doc.search_text for doc in new_docs]
-        )
+        # Clear restored docs from exclusion set
+        if restored:
+            self._excluded_ids -= {doc.doc_id for doc in restored}
+
+        # Embed and add truly new documents to the appropriate collection
+        if truly_new:
+            # Group by doc_type
+            by_type: Dict[str, List[Document]] = {}
+            for doc in truly_new:
+                by_type.setdefault(doc.doc_type, []).append(doc)
+
+            for dtype, docs in by_type.items():
+                col = self.collections.get(dtype)
+                if col is None:
+                    continue
+                new_texts = [doc.search_text for doc in docs]
+                new_embeddings = self._embed_texts(new_texts)
+                col.add(
+                    ids=[doc.doc_id for doc in docs],
+                    embeddings=new_embeddings.tolist(),
+                    metadatas=[{"doc_type": doc.doc_type} for doc in docs],
+                    documents=[doc.search_text for doc in docs]
+                )
 
         # Update in-memory structures
         self.documents.extend(new_docs)

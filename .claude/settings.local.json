@@ -12,7 +12,8 @@
       "Bash(uv python pin:*)",
       "Bash(uv sync:*)",
       "Bash(uv venv:*)",
-      "Bash(UV_PROJECT_ENVIRONMENT=.venv_fresh uv run python:*)"
+      "Bash(UV_PROJECT_ENVIRONMENT=.venv_fresh uv run python:*)",
+      "Bash(python:*)"
     ]
   }
 }

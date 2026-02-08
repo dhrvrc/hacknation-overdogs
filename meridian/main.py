@@ -10,7 +10,7 @@ import time
 import json
 import logging
 
-from .config import DATA_PATH
+from .config import DATA_PATH, GAP_SIMILARITY_THRESHOLD
 from .engine.data_loader import init_datastore
 from .engine.vector_store import VectorStore
 from .engine.query_router import classify_query, route_and_retrieve
@@ -50,7 +50,7 @@ def boot():
     # Initialize modules
     logger.info("Initializing modules...")
     prov = ProvenanceResolver(ds)
-    gap = GapDetector(vs, ds)
+    gap = GapDetector(vs, ds, threshold=GAP_SIMILARITY_THRESHOLD)
     gen = KBGenerator(ds)
     evl = EvalHarness(ds, vs, query_router_module, gap)
 
