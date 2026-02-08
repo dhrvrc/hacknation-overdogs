@@ -109,7 +109,7 @@ Return ONLY this JSON (no markdown, no explanation):
 class QAScorer:
     """
     Quality Assurance scorer for support interactions.
-    Uses Claude API when available, falls back to template scoring otherwise.
+    Uses OpenAI API when available, falls back to template scoring otherwise.
     """
 
     def __init__(self, datastore, api_key: str = ""):
@@ -118,20 +118,20 @@ class QAScorer:
 
         Args:
             datastore: DataStore object with tickets and conversations DataFrames
-            api_key: Anthropic API key (optional, will check env var)
+            api_key: OpenAI API key (optional, will check env var)
         """
         self.datastore = datastore
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
 
-        # Try to import anthropic SDK
-        self.anthropic_available = False
+        # Try to import openai SDK
+        self.openai_available = False
         try:
-            import anthropic
-            self.anthropic = anthropic
-            self.anthropic_available = True
-            logger.info("✅ Anthropic SDK available for QA scoring")
+            import openai
+            self.openai = openai
+            self.openai_available = True
+            logger.info("OpenAI SDK available for QA scoring")
         except ImportError:
-            logger.warning("⚠️  Anthropic SDK not installed - using template fallback for QA scoring")
+            logger.warning("OpenAI SDK not installed - using template fallback for QA scoring")
 
     def score_ticket(self, ticket_number: str) -> dict:
         """
@@ -165,10 +165,10 @@ class QAScorer:
             logger.warning(f"Could not load conversation for {ticket_number}: {e}")
 
         # Decide whether to use LLM or template
-        use_llm = self.anthropic_available and self.api_key
+        use_llm = self.openai_available and self.api_key
 
         if use_llm:
-            logger.info(f"Scoring {ticket_number} with Claude API")
+            logger.info(f"Scoring {ticket_number} with OpenAI API")
             try:
                 user_prompt = self._build_user_prompt(ticket, conversation)
                 score = self._call_llm(user_prompt)
@@ -239,7 +239,7 @@ class QAScorer:
 
     def _call_llm(self, user_prompt: str) -> dict:
         """
-        Call Claude API with the QA system prompt and user prompt.
+        Call OpenAI API with the QA system prompt and user prompt.
 
         Args:
             user_prompt: The user prompt with ticket/conversation data
@@ -250,21 +250,21 @@ class QAScorer:
         Raises:
             Exception: If API call fails or response is invalid
         """
-        client = self.anthropic.Anthropic(api_key=self.api_key)
+        client = self.openai.OpenAI(api_key=self.api_key)
 
         try:
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+            response = client.chat.completions.create(
+                model="gpt-4",
                 max_tokens=2000,
                 temperature=0,  # Deterministic scoring
-                system=QA_SYSTEM_PROMPT,
                 messages=[
+                    {"role": "system", "content": QA_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt}
                 ]
             )
 
             # Extract JSON from response
-            content = response.content[0].text
+            content = response.choices[0].message.content
 
             # Try to parse as JSON directly
             try:
@@ -288,7 +288,7 @@ class QAScorer:
                     raise ValueError(f"Could not parse JSON from response: {content[:200]}")
 
         except Exception as e:
-            logger.error(f"Claude API call failed: {e}")
+            logger.error(f"OpenAI API call failed: {e}")
             raise
 
     def _template_score(self, ticket: dict, conversation: Optional[dict] = None) -> dict:

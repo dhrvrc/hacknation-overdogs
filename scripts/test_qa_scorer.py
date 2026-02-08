@@ -75,15 +75,15 @@ def test_template_fallback():
 
 
 def test_with_llm():
-    """Test QA scorer with Claude API (if API key available)"""
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    """Test QA scorer with OpenAI API (if API key available)"""
+    api_key = os.environ.get("OPENAI_API_KEY", "")
 
     if not api_key:
-        print("\n⏭️  Skipping LLM test - no ANTHROPIC_API_KEY set")
+        print("\n[SKIP] No OPENAI_API_KEY set - skipping LLM test")
         return
 
     print("\n" + "=" * 60)
-    print("Testing QA Scorer - Claude API")
+    print("Testing QA Scorer - OpenAI API")
     print("=" * 60)
 
     from meridian.server.qa_scorer import QAScorer
@@ -136,7 +136,7 @@ Customer: No, that's all."""
     ds = MockDataStore()
     scorer = QAScorer(ds, api_key=api_key)
 
-    print("\nCalling Claude API... (this may take a few seconds)")
+    print("\nCalling OpenAI API... (this may take a few seconds)")
     result = scorer.score_ticket("CS-TEST-002")
 
     # Print results

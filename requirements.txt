@@ -16,5 +16,4 @@ numpy
 scikit-learn
 
 # LLM Integration (optional - for QA scoring and KB generation)
-anthropic
 openai

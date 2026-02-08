@@ -42,16 +42,22 @@ class KBGenerator:
         # Try to import openai
         self.openai_available = False
         if self.api_key:
+            logger.info(f"OpenAI API key detected (length: {len(self.api_key)} chars)")
             try:
                 import openai
                 self.client = openai.OpenAI(api_key=self.api_key)
                 self.openai_available = True
-                logger.info("KB Generator initialized with OpenAI API")
-            except ImportError:
-                logger.warning("openai package not installed - using template fallback")
+                logger.info("KB Generator initialized with OpenAI API - LLM generation enabled")
+            except ImportError as e:
+                logger.warning(f"openai package not installed: {e}")
+                logger.warning("Using template fallback instead")
+                self.openai_available = False
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI client: {type(e).__name__}: {e}")
+                logger.warning("Using template fallback instead")
                 self.openai_available = False
         else:
-            logger.info("No API key provided - using template fallback")
+            logger.info("No OpenAI API key provided - using template fallback")
 
     def generate_draft(self, ticket_number: str) -> KBDraft:
         """
@@ -210,6 +216,7 @@ Script Text: {script_text}
 
         # Call OpenAI
         try:
+            logger.info(f"Calling OpenAI API with model={OPENAI_MODEL}...")
             response = self.client.chat.completions.create(
                 model=OPENAI_MODEL,
                 max_tokens=2000,
@@ -220,6 +227,7 @@ Script Text: {script_text}
             )
 
             full_text = response.choices[0].message.content
+            logger.info(f"OpenAI API call successful, received {len(full_text)} characters")
 
             # Extract title (first line) and body (rest)
             lines = full_text.strip().split('\n', 1)
@@ -229,7 +237,8 @@ Script Text: {script_text}
             return title, body
 
         except Exception as e:
-            logger.error(f"LLM generation failed: {e}, falling back to template")
+            logger.error(f"OpenAI API call FAILED: {type(e).__name__}: {e}")
+            logger.error(f"Falling back to template generation")
             return self._generate_with_template(ticket, conversation, script)
 
     def _generate_with_template(
