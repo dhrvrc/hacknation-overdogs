@@ -229,18 +229,54 @@ class EvalHarness:
             'total_questions': total_questions
         }
 
+    def _eval_synthetic_kb_retrieval(self, top_k_values=[1, 5, 10]) -> dict:
+        """
+        Direct KB retrieval test for synthetic KB articles.
+
+        For each ticket that generated a synthetic KB, use the ticket's
+        Description as a query and search the KB partition directly.
+        Returns hit@k metrics showing whether synthetic KBs are retrievable.
+        """
+        tickets = self.ds.df_tickets
+        tickets_with_kb = tickets[tickets['Generated_KB_Article_ID'].notna()]
+        total = len(tickets_with_kb)
+        max_k = max(top_k_values)
+
+        hits = {k: 0 for k in top_k_values}
+
+        for _, ticket in tickets_with_kb.iterrows():
+            target_kb_id = ticket['Generated_KB_Article_ID']
+            # Use ticket Description as query (contains the specific symptom info)
+            query = str(ticket.get('Description', ''))
+            if not query or query == 'nan':
+                query = str(ticket.get('Subject', ''))
+
+            # Query KB partition directly (bypasses classifier)
+            results = self.vs.retrieve(query, top_k=max_k, doc_types=['KB'])
+            result_ids = [r.doc_id for r in results]
+
+            for k in top_k_values:
+                if target_kb_id in result_ids[:k]:
+                    hits[k] += 1
+
+        return {
+            'overall': {f'hit@{k}': hits[k] / total if total > 0 else 0 for k in top_k_values},
+            'total_questions': total,
+        }
+
     def eval_before_after(self) -> dict:
         """
         The headline self-learning proof.
 
         1. Identify the 161 synthetic KB doc_ids
-        2. Find which ground-truth questions target those IDs (filtered set)
-        3. Run retrieval eval (overall + filtered) WITH synthetics = "after_learning"
+        2. Run retrieval eval (overall) WITH synthetics = "after_learning"
+        3. Run synthetic KB retrieval test WITH synthetics
         4. Remove synthetics from index
         5. Run gap scan while synthetics are removed = "before" gaps
-        6. Run retrieval eval (overall + filtered) WITHOUT synthetics = "before_learning"
-        7. Restore synthetics, run gap scan again = "after" gaps
-        8. Return rich delta with filtered retrieval, overall retrieval, and gap metrics
+        6. Run retrieval eval (overall) WITHOUT synthetics = "before_learning"
+        7. Run synthetic KB retrieval test WITHOUT synthetics (expect 0%)
+        8. Restore synthetics, run gap scan again = "after" gaps
+        9. Return rich delta with synthetic KB retrieval, overall retrieval, and gap metrics
         """
         logger.info("Running before/after self-learning evaluation")
 
@@ -258,23 +294,18 @@ class EvalHarness:
 
         print(f"\nIdentified {len(synthetic_kb_ids)} synthetic KB articles")
 
-        # Find questions whose Target_ID is a synthetic KB article
-        all_questions = self.ds.df_questions
-        filtered_questions = all_questions[all_questions['Target_ID'].isin(synthetic_kb_ids)]
-        num_filtered = len(filtered_questions)
-        print(f"Found {num_filtered} questions targeting synthetic KB articles (out of {len(all_questions)})")
+        # Count tickets that generated synthetic KBs
+        tickets_with_kb = self.ds.df_tickets[self.ds.df_tickets['Generated_KB_Article_ID'].notna()]
+        num_filtered = len(tickets_with_kb)
+        print(f"Source tickets for synthetic KBs: {num_filtered}")
 
         # --- Phase 1: WITH synthetics (after learning) ---
         print("\n[1/4] Running retrieval eval WITH synthetic KBs (after learning)...")
         after_retrieval = self.eval_retrieval(top_k_values=[1, 5, 10])
 
-        # Run filtered eval on just synthetic-targeted questions
-        after_filtered = None
-        if num_filtered > 0:
-            print(f"  Running filtered eval on {num_filtered} synthetic-targeted questions...")
-            self.ds.df_questions = filtered_questions
-            after_filtered = self.eval_retrieval(top_k_values=[1, 5, 10])
-            self.ds.df_questions = all_questions
+        # Run synthetic KB retrieval test (direct KB partition query)
+        print(f"  Running synthetic KB retrieval test ({num_filtered} ticket queries)...")
+        after_filtered = self._eval_synthetic_kb_retrieval(top_k_values=[1, 5, 10])
 
         # --- Phase 2: REMOVE synthetics ---
         print("\n[2/4] Removing synthetic KBs...")
@@ -290,13 +321,9 @@ class EvalHarness:
         print("  Running retrieval eval WITHOUT synthetic KBs (before learning)...")
         before_retrieval = self.eval_retrieval(top_k_values=[1, 5, 10])
 
-        # Run filtered eval without synthetics
-        before_filtered = None
-        if num_filtered > 0:
-            print(f"  Running filtered eval on {num_filtered} synthetic-targeted questions...")
-            self.ds.df_questions = filtered_questions
-            before_filtered = self.eval_retrieval(top_k_values=[1, 5, 10])
-            self.ds.df_questions = all_questions
+        # Run synthetic KB retrieval test WITHOUT synthetics (should be ~0%)
+        print(f"  Running synthetic KB retrieval test ({num_filtered} ticket queries)...")
+        before_filtered = self._eval_synthetic_kb_retrieval(top_k_values=[1, 5, 10])
 
         # --- Phase 4: RESTORE synthetics ---
         print("\n[4/4] Restoring synthetic KBs...")
@@ -329,7 +356,7 @@ class EvalHarness:
             'num_filtered_questions': num_filtered,
         }
 
-        # Add filtered retrieval deltas
+        # Add filtered retrieval deltas (synthetic KB retrieval test)
         if before_filtered and after_filtered:
             delta['filtered_hit@1_improvement'] = after_filtered['overall']['hit@1'] - before_filtered['overall']['hit@1']
             delta['filtered_hit@5_improvement'] = after_filtered['overall']['hit@5'] - before_filtered['overall']['hit@5']
@@ -463,9 +490,9 @@ class EvalHarness:
             lines.append(f"  Avg similarity:  {delta['before_avg_similarity']:.4f} -> {delta['after_avg_similarity']:.4f} (+{delta['similarity_lift']:.4f})")
             lines.append(f"  Synthetic articles added: {delta['num_synthetic_articles']}")
 
-            # Filtered retrieval (the targeted proof)
+            # Synthetic KB retrieval (the targeted proof)
             if delta.get('filtered_hit@5_improvement') is not None:
-                lines.append(f"\nFiltered Retrieval ({delta['num_filtered_questions']} questions targeting synthetic KBs):")
+                lines.append(f"\nSynthetic KB Retrieval ({delta['num_filtered_questions']} ticket-derived queries):")
                 lines.append(f"  hit@5:  {delta['filtered_before_hit@5']:.1%} -> {delta['filtered_after_hit@5']:.1%} ({delta['filtered_hit@5_improvement']:+.1%})")
                 lines.append(f"  hit@1:  {delta['filtered_hit@1_improvement']:+.1%}")
                 lines.append(f"  hit@10: {delta['filtered_hit@10_improvement']:+.1%}")

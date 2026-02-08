@@ -356,7 +356,7 @@ def get_dashboard():
         scripts_total = sum(1 for d in ds.documents if d.doc_type == "SCRIPT")
 
         # Learning pipeline stats
-        learning_events = ds.learning_events if hasattr(ds, 'learning_events') else None
+        learning_events = ds.df_learning_events if hasattr(ds, 'df_learning_events') else None
         if learning_events is not None:
             approved = len(learning_events[learning_events["Final_Status"] == "Approved"])
             rejected = len(learning_events[learning_events["Final_Status"] == "Rejected"])
@@ -379,7 +379,7 @@ def get_dashboard():
             })
 
         # Ticket stats
-        tickets = ds.tickets if hasattr(ds, 'tickets') else None
+        tickets = ds.df_tickets if hasattr(ds, 'df_tickets') else None
         if tickets is not None:
             total_tickets = len(tickets)
             by_tier = tickets["Tier"].value_counts().to_dict()
@@ -456,7 +456,7 @@ def get_conversation(ticket_number: str):
             "agent_name": conv_row["Agent_Name"],
             "sentiment": conv_row["Sentiment"],
             "issue_summary": conv_row["Issue_Summary"],
-            "transcript": conv_row["Transcript_Text"]
+            "transcript": conv_row["Transcript"]
         }
 
     except HTTPException:

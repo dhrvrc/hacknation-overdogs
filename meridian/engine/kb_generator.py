@@ -219,7 +219,7 @@ Script Text: {script_text}
             logger.info(f"Calling OpenAI API with model={OPENAI_MODEL}...")
             response = self.client.chat.completions.create(
                 model=OPENAI_MODEL,
-                max_tokens=2000,
+                max_completion_tokens=2000,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -334,8 +334,9 @@ Script Text: {script_text}
         # Mark as approved
         draft.status = "Approved"
 
-        # Create Document
-        doc_id = f"KB-{draft_id}"
+        # Create Document - use KB-GEN-{ticket} format for traceability
+        ticket_suffix = draft.source_ticket.replace("CS-", "") if draft.source_ticket else draft_id
+        doc_id = f"KB-GEN-{ticket_suffix}"
 
         metadata = {
             'category': draft.category,

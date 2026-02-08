@@ -262,7 +262,7 @@ class QAScorer:
         try:
             response = self.client.chat.completions.create(
                 model=OPENAI_MODEL,
-                max_tokens=2000,
+                max_completion_tokens=2000,
                 temperature=0,  # Deterministic scoring
                 messages=[
                     {"role": "system", "content": QA_SYSTEM_PROMPT},

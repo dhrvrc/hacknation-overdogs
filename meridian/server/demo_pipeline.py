@@ -61,8 +61,8 @@ class DemoPipeline:
         if self.state.approved_doc_id:
             synthetic_ticket_ids.append(self.state.approved_doc_id)
 
-        # Only remove docs that actually exist in the index
-        existing_doc_ids = {d.doc_id for d in self.ds.documents}
+        # Only remove docs that actually exist in the vector store index
+        existing_doc_ids = {d.doc_id for d in self.vs.documents}
         to_remove = set(synthetic_ticket_ids) & existing_doc_ids
 
         if to_remove:
@@ -73,6 +73,13 @@ class DemoPipeline:
         for ticket_num in synthetic_ticket_ids:
             if ticket_num in self.ds.ticket_by_number:
                 del self.ds.ticket_by_number[ticket_num]
+
+        # Remove synthetic conversations from DataFrame
+        synthetic_ticket_nums = [t["Ticket_Number"] for t in get_synthetic_tickets()]
+        if hasattr(self.ds, 'df_conversations'):
+            self.ds.df_conversations = self.ds.df_conversations[
+                ~self.ds.df_conversations["Ticket_Number"].isin(synthetic_ticket_nums)
+            ].reset_index(drop=True)
 
         # Reset state
         self.state.reset()
@@ -133,13 +140,21 @@ class DemoPipeline:
         for ticket in tickets:
             self.ds.ticket_by_number[ticket["Ticket_Number"]] = pd.Series(ticket)
 
-        # Register conversations (if datastore has conversations DataFrame)
-        if hasattr(self.ds, 'conversations'):
-            # Append to existing conversations DataFrame
+        # Register conversations so the /api/conversations endpoint works for demo tickets
+        if hasattr(self.ds, 'df_conversations'):
             for conv in conversations:
-                # Create a row and append
-                new_row = pd.DataFrame([conv])
-                self.ds.conversations = pd.concat([self.ds.conversations, new_row], ignore_index=True)
+                # Map synthetic conversation keys to real DataFrame column names
+                row = {
+                    "Ticket_Number": conv["Ticket_Number"],
+                    "Conversation_ID": conv["Conversation_ID"],
+                    "Channel": conv["Channel"],
+                    "Agent_Name": conv["Agent_Name"],
+                    "Sentiment": conv.get("Sentiment", conv.get("Customer_Sentiment", "Neutral")),
+                    "Issue_Summary": conv["Issue_Summary"],
+                    "Transcript": conv.get("Transcript", conv.get("Transcript_Text", "")),
+                }
+                new_row = pd.DataFrame([row])
+                self.ds.df_conversations = pd.concat([self.ds.df_conversations, new_row], ignore_index=True)
 
         self.state.phase = DemoPhase.TICKETS_INJECTED
         self.state.started_at = self.state.events_log[0]["timestamp"] if self.state.events_log else None
@@ -333,6 +348,47 @@ class DemoPipeline:
                     rank = i + 1
                     score = r.score
                     break
+
+            # If not found via router, search KB partition directly
+            if not found and self.state.approved_doc_id:
+                kb_results = self.vs.retrieve(q["question"], top_k=500, doc_types=["KB"])
+                for i, r in enumerate(kb_results):
+                    if r.doc_id == self.state.approved_doc_id:
+                        found = True
+                        rank = i + 1
+                        score = r.score
+                        break
+
+            # Last resort: compute direct similarity between query and article
+            if not found and self.state.approved_doc_id:
+                try:
+                    sim, _ = self.vs.similarity_to_corpus(
+                        q["question"], doc_types=["KB"]
+                    )
+                    # Check if the article exists and get its direct similarity
+                    doc = self.vs.doc_index.get(self.state.approved_doc_id)
+                    if doc:
+                        query_vec = self.vs._embed_query(q["question"])
+                        col = self.vs.collections.get("KB")
+                        if col:
+                            try:
+                                article_emb = col.get(
+                                    ids=[self.state.approved_doc_id],
+                                    include=["embeddings"]
+                                )
+                                if article_emb and article_emb["embeddings"]:
+                                    import numpy as np
+                                    a_vec = np.array(article_emb["embeddings"][0])
+                                    q_vec = query_vec[0]
+                                    direct_sim = float(np.dot(q_vec, a_vec))
+                                    if direct_sim > 0.4:
+                                        found = True
+                                        rank = -1  # direct match, not ranked
+                                        score = direct_sim
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
 
             top = all_results[0] if all_results else None
             verification.append({

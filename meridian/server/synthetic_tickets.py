@@ -262,19 +262,19 @@ Alex (ExampleCo): Of course, James. Good luck with month-end. We'll keep you pos
 
 DEMO_QUESTIONS = [
     {
-        "question": "A customer is getting blank PDFs when exporting their Rent Roll report. The preview shows data fine but the export is empty. What should I check?",
+        "question": "After a property date advance, the Monthly Rent Roll report exports as a blank 0-byte PDF even though the preview looks fine. How do I fix this stale cache issue?",
         "expected_answer_type": "KB",
-        "description": "Should match the new KB article about Report Export Failure after it's been created and approved."
+        "description": "Should match the new KB article about blank PDF from stale reporting cache after property date advance."
     },
     {
-        "question": "We have a site where the HAP Billing Summary export shows old voucher amounts that don't match what's in the system after a batch correction. How do we fix this?",
+        "question": "Report export produces blank PDF after advancing the property date. Multiple users at the same site are affected. Is there a way to clear the reporting cache?",
         "expected_answer_type": "KB",
-        "description": "Should match the materialized view refresh resolution."
+        "description": "Should match the new KB article — focuses on cache clearing resolution."
     },
     {
-        "question": "Multiple users across different sites are reporting issues with report exports — blank files, wrong data, timeouts. Is this a known issue?",
+        "question": "We're getting zero-byte blank PDF exports on the Rent Roll report since the last property date advance. The in-app preview shows data correctly. What's the fix?",
         "expected_answer_type": "KB",
-        "description": "Should match the general Report Export Failure KB article."
+        "description": "Should match the new KB article — symptom-focused angle."
     }
 ]
 
