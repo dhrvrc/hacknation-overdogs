@@ -9,6 +9,8 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 
+from meridian.config import OPENAI_MODEL
+
 logger = logging.getLogger(__name__)
 
 # The full QA rubric (from the QA_Evaluation_Prompt tab in the dataset)
@@ -123,15 +125,22 @@ class QAScorer:
         self.datastore = datastore
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
 
-        # Try to import openai SDK
+        # Try to import openai SDK and create client once
         self.openai_available = False
-        try:
-            import openai
-            self.openai = openai
-            self.openai_available = True
-            logger.info("OpenAI SDK available for QA scoring")
-        except ImportError:
-            logger.warning("OpenAI SDK not installed - using template fallback for QA scoring")
+        self.client = None
+        if self.api_key:
+            try:
+                import openai
+                self.client = openai.OpenAI(api_key=self.api_key)
+                self.openai_available = True
+                logger.info("OpenAI client initialized for QA scoring")
+            except ImportError:
+                logger.warning("OpenAI SDK not installed - using template fallback for QA scoring")
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI client: {type(e).__name__}: {e}")
+                logger.warning("Using template fallback for QA scoring")
+        else:
+            logger.info("No OpenAI API key - using template fallback for QA scoring")
 
     def score_ticket(self, ticket_number: str) -> dict:
         """
@@ -157,7 +166,7 @@ class QAScorer:
         # Look up conversation (may not exist for all tickets)
         conversation = None
         try:
-            conversations = self.datastore.conversations
+            conversations = self.datastore.df_conversations
             conv_data = conversations[conversations["Ticket_Number"] == ticket_number]
             if len(conv_data) > 0:
                 conversation = conv_data.iloc[0].to_dict()
@@ -250,11 +259,9 @@ class QAScorer:
         Raises:
             Exception: If API call fails or response is invalid
         """
-        client = self.openai.OpenAI(api_key=self.api_key)
-
         try:
-            response = client.chat.completions.create(
-                model="gpt-4",
+            response = self.client.chat.completions.create(
+                model=OPENAI_MODEL,
                 max_tokens=2000,
                 temperature=0,  # Deterministic scoring
                 messages=[

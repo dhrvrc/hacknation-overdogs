@@ -128,7 +128,7 @@ Critical metrics to emphasize:
 ## Environment Configuration
 
 Required environment variables:
-- `ANTHROPIC_API_KEY`: For KB article generation (optional - falls back to template)
+- `OPENAI_API_KEY`: For KB article generation and QA scoring (optional - falls back to template)
 - `MERIDIAN_DATA`: Path to dataset (defaults to `SupportMind_Final_Data.xlsx`)
 
 ## Anti-Patterns to Avoid

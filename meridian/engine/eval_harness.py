@@ -234,13 +234,13 @@ class EvalHarness:
         The headline self-learning proof.
 
         1. Identify the 161 synthetic KB doc_ids
-        2. Store current eval_retrieval results as "after_learning"
-        3. vector_store.remove_documents(synthetic_ids)
-        4. Run eval_retrieval → "before_learning"
-        5. vector_store.add_documents(synthetic_docs) to restore
-        6. Also include gap_detector.before_after_comparison() results
-
-        Returns before/after comparison with delta.
+        2. Find which ground-truth questions target those IDs (filtered set)
+        3. Run retrieval eval (overall + filtered) WITH synthetics = "after_learning"
+        4. Remove synthetics from index
+        5. Run gap scan while synthetics are removed = "before" gaps
+        6. Run retrieval eval (overall + filtered) WITHOUT synthetics = "before_learning"
+        7. Restore synthetics, run gap scan again = "after" gaps
+        8. Return rich delta with filtered retrieval, overall retrieval, and gap metrics
         """
         logger.info("Running before/after self-learning evaluation")
 
@@ -258,40 +258,101 @@ class EvalHarness:
 
         print(f"\nIdentified {len(synthetic_kb_ids)} synthetic KB articles")
 
-        # Current state (with synthetics) = "after learning"
-        print("\n[1/3] Running retrieval eval WITH synthetic KBs (after learning)...")
+        # Find questions whose Target_ID is a synthetic KB article
+        all_questions = self.ds.df_questions
+        filtered_questions = all_questions[all_questions['Target_ID'].isin(synthetic_kb_ids)]
+        num_filtered = len(filtered_questions)
+        print(f"Found {num_filtered} questions targeting synthetic KB articles (out of {len(all_questions)})")
+
+        # --- Phase 1: WITH synthetics (after learning) ---
+        print("\n[1/4] Running retrieval eval WITH synthetic KBs (after learning)...")
         after_retrieval = self.eval_retrieval(top_k_values=[1, 5, 10])
 
-        # Remove synthetics and re-eval = "before learning"
-        print("\n[2/3] Removing synthetic KBs and re-running (before learning)...")
+        # Run filtered eval on just synthetic-targeted questions
+        after_filtered = None
+        if num_filtered > 0:
+            print(f"  Running filtered eval on {num_filtered} synthetic-targeted questions...")
+            self.ds.df_questions = filtered_questions
+            after_filtered = self.eval_retrieval(top_k_values=[1, 5, 10])
+            self.ds.df_questions = all_questions
+
+        # --- Phase 2: REMOVE synthetics ---
+        print("\n[2/4] Removing synthetic KBs...")
         self.vs.remove_documents(synthetic_kb_ids)
 
+        # --- Phase 3: Gap scan while synthetics are removed (before gaps) ---
+        print("\n[3/4] Running gap scan WITHOUT synthetic KBs (before learning)...")
+        before_gap_results = self.gap.scan_all_tickets()
+        before_gaps = sum(1 for r in before_gap_results if r.is_gap)
+        before_avg_sim = sum(r.resolution_similarity for r in before_gap_results) / len(before_gap_results)
+
+        # Run retrieval eval without synthetics
+        print("  Running retrieval eval WITHOUT synthetic KBs (before learning)...")
         before_retrieval = self.eval_retrieval(top_k_values=[1, 5, 10])
 
-        # Restore synthetics
-        print("\n[3/3] Restoring synthetic KBs...")
+        # Run filtered eval without synthetics
+        before_filtered = None
+        if num_filtered > 0:
+            print(f"  Running filtered eval on {num_filtered} synthetic-targeted questions...")
+            self.ds.df_questions = filtered_questions
+            before_filtered = self.eval_retrieval(top_k_values=[1, 5, 10])
+            self.ds.df_questions = all_questions
+
+        # --- Phase 4: RESTORE synthetics ---
+        print("\n[4/4] Restoring synthetic KBs...")
         self.vs.add_documents(synthetic_docs)
 
-        # Get gap comparison (already does before/after internally)
-        print("\nRunning gap detector before/after comparison...")
-        gap_comparison = self.gap.before_after_comparison()
+        # Gap scan with synthetics restored (after gaps)
+        print("  Running gap scan WITH synthetic KBs (after learning)...")
+        after_gap_results = self.gap.scan_all_tickets()
+        after_gaps = sum(1 for r in after_gap_results if r.is_gap)
+        after_avg_sim = sum(r.resolution_similarity for r in after_gap_results) / len(after_gap_results)
+
+        # Compute gap improvement
+        gaps_closed = before_gaps - after_gaps
+        similarity_lift = after_avg_sim - before_avg_sim
+        pct_improvement = (gaps_closed / before_gaps * 100) if before_gaps > 0 else 0
 
         # Compute deltas
         delta = {
             'hit@1_improvement': after_retrieval['overall']['hit@1'] - before_retrieval['overall']['hit@1'],
             'hit@5_improvement': after_retrieval['overall']['hit@5'] - before_retrieval['overall']['hit@5'],
-            'gaps_closed': gap_comparison['improvement']['gaps_closed'],
-            'headline': f"Self-learning loop improved hit@5 from {before_retrieval['overall']['hit@5']:.1%} to {after_retrieval['overall']['hit@5']:.1%} (+{(after_retrieval['overall']['hit@5'] - before_retrieval['overall']['hit@5']):.1%})"
+            'hit@10_improvement': after_retrieval['overall']['hit@10'] - before_retrieval['overall']['hit@10'],
+            'gaps_closed': gaps_closed,
+            'similarity_lift': similarity_lift,
+            'pct_gap_improvement': pct_improvement,
+            'before_gaps': before_gaps,
+            'after_gaps': after_gaps,
+            'before_avg_similarity': before_avg_sim,
+            'after_avg_similarity': after_avg_sim,
+            'num_synthetic_articles': len(synthetic_kb_ids),
+            'num_filtered_questions': num_filtered,
         }
+
+        # Add filtered retrieval deltas
+        if before_filtered and after_filtered:
+            delta['filtered_hit@1_improvement'] = after_filtered['overall']['hit@1'] - before_filtered['overall']['hit@1']
+            delta['filtered_hit@5_improvement'] = after_filtered['overall']['hit@5'] - before_filtered['overall']['hit@5']
+            delta['filtered_hit@10_improvement'] = after_filtered['overall']['hit@10'] - before_filtered['overall']['hit@10']
+            delta['filtered_before_hit@5'] = before_filtered['overall']['hit@5']
+            delta['filtered_after_hit@5'] = after_filtered['overall']['hit@5']
 
         return {
             'before_learning': {
                 'retrieval': before_retrieval,
-                'gaps': gap_comparison['before_learning']
+                'filtered_retrieval': before_filtered,
+                'gaps': {
+                    'total_gaps': before_gaps,
+                    'avg_resolution_similarity': before_avg_sim,
+                }
             },
             'after_learning': {
                 'retrieval': after_retrieval,
-                'gaps': gap_comparison['after_learning']
+                'filtered_retrieval': after_filtered,
+                'gaps': {
+                    'total_gaps': after_gaps,
+                    'avg_resolution_similarity': after_avg_sim,
+                }
             },
             'delta': delta
         }
@@ -391,19 +452,26 @@ class EvalHarness:
             ba = results['before_after']
             delta = ba['delta']
 
-            lines.append("\n" + delta['headline'])
+            # Lead with gap detection metrics (the strongest proof)
+            lines.append("\nGap Detection (Knowledge Coverage):")
+            lines.append(f"  Before learning: {delta['before_gaps']} knowledge gaps")
+            lines.append(f"  After learning:  {delta['after_gaps']} knowledge gaps")
+            lines.append(f"  Gaps closed:     {delta['gaps_closed']} ({delta['pct_gap_improvement']:.1f}% improvement)")
+            lines.append(f"  Avg similarity:  {delta['before_avg_similarity']:.4f} -> {delta['after_avg_similarity']:.4f} (+{delta['similarity_lift']:.4f})")
+            lines.append(f"  Synthetic articles added: {delta['num_synthetic_articles']}")
 
-            lines.append("\nRetrieval Improvement:")
-            lines.append(f"  hit@1: +{delta['hit@1_improvement']:.1%}")
-            lines.append(f"  hit@5: +{delta['hit@5_improvement']:.1%}")
+            # Filtered retrieval (the targeted proof)
+            if delta.get('filtered_hit@5_improvement') is not None:
+                lines.append(f"\nFiltered Retrieval ({delta['num_filtered_questions']} questions targeting synthetic KBs):")
+                lines.append(f"  hit@5:  {delta['filtered_before_hit@5']:.1%} -> {delta['filtered_after_hit@5']:.1%} (+{delta['filtered_hit@5_improvement']:.1%})")
+                lines.append(f"  hit@1:  +{delta['filtered_hit@1_improvement']:.1%}")
+                lines.append(f"  hit@10: +{delta['filtered_hit@10_improvement']:.1%}")
 
-            lines.append("\nGap Detection:")
-            lines.append(f"  Gaps closed: {delta['gaps_closed']}")
-
-            before_gaps = ba['before_learning']['gaps']['total_gaps']
-            after_gaps = ba['after_learning']['gaps']['total_gaps']
-            lines.append(f"  Before: {before_gaps} gaps")
-            lines.append(f"  After: {after_gaps} gaps")
+            # Overall retrieval (secondary context)
+            lines.append("\nOverall Retrieval (all 1,000 questions):")
+            lines.append(f"  hit@1:  +{delta['hit@1_improvement']:.1%}")
+            lines.append(f"  hit@5:  +{delta['hit@5_improvement']:.1%}")
+            lines.append(f"  hit@10: +{delta['hit@10_improvement']:.1%}")
 
         lines.append("\n" + "=" * 70)
         lines.append("END OF REPORT")

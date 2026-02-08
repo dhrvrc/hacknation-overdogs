@@ -441,7 +441,7 @@ def get_conversation(ticket_number: str):
 
     try:
         # Look up conversation from datastore
-        conversations = ds.conversations
+        conversations = ds.df_conversations
         conv = conversations[conversations["Ticket_Number"] == ticket_number]
 
         if len(conv) == 0:
