@@ -207,3 +207,64 @@ class TestKBApproveReject:
         """Rejecting a nonexistent draft should return 404 or 503."""
         r = requests.post(f"{BASE_URL}/api/kb/reject/DRAFT-nonexistent")
         assert r.status_code in (404, 503)
+
+
+# ============================================================================
+# POST /api/gap/check (copilot gap detection)
+# ============================================================================
+
+class TestGapCheck:
+    def test_gap_check_real_ticket(self) -> None:
+        """Check a real ticket for gaps — should return 200 with is_gap bool."""
+        r = requests.post(
+            f"{BASE_URL}/api/gap/check",
+            json={"ticket_number": "CS-03758997"},
+        )
+        if r.status_code == 200:
+            data = r.json()
+            assert "is_gap" in data
+            assert "resolution_similarity" in data
+            assert "module" in data
+            assert isinstance(data["is_gap"], bool)
+        # 503 is acceptable if engine not available
+        assert r.status_code in (200, 503)
+
+    def test_gap_check_unknown_ticket(self) -> None:
+        """Unknown ticket should return 404 or 503."""
+        r = requests.post(
+            f"{BASE_URL}/api/gap/check",
+            json={"ticket_number": "CS-NONEXISTENT"},
+        )
+        assert r.status_code in (404, 503)
+
+
+# ============================================================================
+# POST /api/kb/generate (copilot KB draft generation)
+# ============================================================================
+
+class TestKBGenerate:
+    def test_kb_generate_real_ticket(self) -> None:
+        """Generate a KB draft from a real ticket — should return 200 with draft fields."""
+        r = requests.post(
+            f"{BASE_URL}/api/kb/generate",
+            json={"ticket_number": "CS-03758997"},
+            timeout=30,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            assert "draft_id" in data
+            assert "title" in data
+            assert "body" in data
+            assert "source_ticket" in data
+            assert data["source_ticket"] == "CS-03758997"
+            assert data["generation_method"] in ("llm", "template")
+        # 503 is acceptable if engine not available
+        assert r.status_code in (200, 503)
+
+    def test_kb_generate_unknown_ticket(self) -> None:
+        """Unknown ticket should return 404 or 503."""
+        r = requests.post(
+            f"{BASE_URL}/api/kb/generate",
+            json={"ticket_number": "CS-NONEXISTENT"},
+        )
+        assert r.status_code in (404, 503)

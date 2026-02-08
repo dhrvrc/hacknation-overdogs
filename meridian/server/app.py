@@ -19,6 +19,10 @@ from meridian.server.contracts import (
     ApproveResponse,
     RejectResponse,
     HealthResponse,
+    GapCheckRequest,
+    GapCheckResponse,
+    KBGenerateRequest,
+    KBGenerateResponse,
     adapt_eval_results,
     build_default_eval_results,
     compute_placeholders_total,
@@ -651,6 +655,67 @@ def get_emerging_issues():
         raise HTTPException(500, f"Emerging issues failed: {str(e)}")
 
 
+@app.post("/api/gap/check", response_model=GapCheckResponse)
+def check_gap(req: GapCheckRequest):
+    """
+    Check a single ticket for knowledge gaps.
+
+    Compares the ticket's resolution text against the KB corpus.
+    If the best similarity score is below the gap threshold, flags it as a gap.
+    Used by the copilot to detect gaps on issue resolution.
+    """
+    if not ENGINE_AVAILABLE:
+        raise HTTPException(503, "Engine not available")
+
+    try:
+        result = gap.check_ticket(req.ticket_number)
+        return {
+            "ticket_number": result.ticket_number,
+            "is_gap": result.is_gap,
+            "resolution_similarity": round(result.resolution_similarity, 4),
+            "best_matching_kb_id": result.best_matching_kb_id,
+            "module": result.module,
+            "category": result.category,
+            "description_text": result.description_text,
+        }
+    except ValueError:
+        raise HTTPException(404, f"Ticket {req.ticket_number} not found")
+    except Exception as e:
+        logger.error(f"Gap check failed: {e}")
+        raise HTTPException(500, f"Gap check failed: {str(e)}")
+
+
+@app.post("/api/kb/generate", response_model=KBGenerateResponse)
+def generate_kb_draft(req: KBGenerateRequest):
+    """
+    Generate a KB article draft from a resolved ticket.
+
+    Uses LLM when available, falls back to template generation.
+    The draft is stored in-memory and can be approved/rejected via
+    POST /api/kb/approve and /api/kb/reject.
+    """
+    if not ENGINE_AVAILABLE:
+        raise HTTPException(503, "Engine not available")
+
+    try:
+        draft = gen.generate_draft(req.ticket_number)
+        return {
+            "draft_id": draft.draft_id,
+            "title": draft.title,
+            "body": draft.body,
+            "source_ticket": draft.source_ticket,
+            "module": draft.module,
+            "category": draft.category,
+            "generated_at": draft.generated_at,
+            "generation_method": draft.generation_method,
+        }
+    except ValueError:
+        raise HTTPException(404, f"Ticket {req.ticket_number} not found")
+    except Exception as e:
+        logger.error(f"KB generation failed: {e}")
+        raise HTTPException(500, f"KB generation failed: {str(e)}")
+
+
 # ============================================================================
 # DEMO PIPELINE ENDPOINTS
 # ============================================================================
@@ -791,6 +856,8 @@ def root():
             "kb_reject": "POST /api/kb/reject/{draft_id}",
             "eval_run": "POST /api/eval/run",
             "emerging_issues": "GET /api/gap/emerging",
+            "gap_check": "POST /api/gap/check",
+            "kb_generate": "POST /api/kb/generate",
             "demo_state": "GET /api/demo/state",
             "demo_reset": "POST /api/demo/reset",
             "demo_inject": "POST /api/demo/inject",

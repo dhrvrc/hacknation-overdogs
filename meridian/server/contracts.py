@@ -257,6 +257,47 @@ class HealthResponse(BaseModel):
 
 
 # ============================================================================
+# POST /api/gap/check — Request/Response Models
+# ============================================================================
+
+class GapCheckRequest(BaseModel):
+    """Request model for POST /api/gap/check."""
+    ticket_number: str
+
+
+class GapCheckResponse(BaseModel):
+    """Response model for POST /api/gap/check."""
+    ticket_number: str
+    is_gap: bool
+    resolution_similarity: float
+    best_matching_kb_id: str
+    module: str
+    category: str
+    description_text: str
+
+
+# ============================================================================
+# POST /api/kb/generate — Request/Response Models
+# ============================================================================
+
+class KBGenerateRequest(BaseModel):
+    """Request model for POST /api/kb/generate."""
+    ticket_number: str
+
+
+class KBGenerateResponse(BaseModel):
+    """Response model for POST /api/kb/generate."""
+    draft_id: str
+    title: str
+    body: str
+    source_ticket: str
+    module: str
+    category: str
+    generated_at: str
+    generation_method: str
+
+
+# ============================================================================
 # ADAPTER FUNCTIONS
 # ============================================================================
 

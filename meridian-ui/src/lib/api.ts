@@ -3,7 +3,7 @@
 // Flip USE_MOCK to false when Person 3's FastAPI is ready.
 // ============================================================
 
-const USE_MOCK = true;
+const USE_MOCK = false;
 const API_BASE = "http://localhost:8000";
 
 import {
@@ -79,6 +79,26 @@ export async function rejectDraft(draftId: string) {
   if (USE_MOCK) return mockRejectResponse;
   const res = await fetch(`${API_BASE}/api/kb/reject/${draftId}`, {
     method: "POST",
+  });
+  return res.json();
+}
+
+/** POST /api/gap/check — check a ticket for knowledge gaps */
+export async function checkGap(ticketNumber: string) {
+  const res = await fetch(`${API_BASE}/api/gap/check`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ticket_number: ticketNumber }),
+  });
+  return res.json();
+}
+
+/** POST /api/kb/generate — generate a KB draft from a resolved ticket */
+export async function generateKBDraft(ticketNumber: string) {
+  const res = await fetch(`${API_BASE}/api/kb/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ticket_number: ticketNumber }),
   });
   return res.json();
 }
