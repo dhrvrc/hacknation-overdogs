@@ -42,7 +42,7 @@ type StepStatus = "idle" | "running" | "done" | "error";
 
 // ── Main Component ──────────────────────────────────────────
 
-export default function DemoView() {
+export default function DemoView({ onEnterApp }: { onEnterApp?: () => void }) {
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>({});
   const [stepResults, setStepResults] = useState<Record<string, any>>({});
   const [runningAll, setRunningAll] = useState(false);
@@ -207,6 +207,27 @@ export default function DemoView() {
             Meridian gives support agents evidence-grounded answers with full
             provenance tracing — and gets smarter from every resolved ticket.
           </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.5,
+              delay: 0.4,
+              ease: easeOut,
+            }}
+            className="mt-8 flex flex-wrap items-center justify-center gap-4"
+          >
+            <button
+              onClick={onEnterApp}
+              className="rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/80 hover:shadow-sm"
+            >
+              Try the Copilot
+            </button>
+            <button className="rounded-full border border-input bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-all duration-150 hover:bg-card hover:border-muted-foreground/40">
+              Watch it learn
+            </button>
+          </motion.div>
         </div>
       </section>
 

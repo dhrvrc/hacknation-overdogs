@@ -12,6 +12,8 @@ import SuggestionCard from "./SuggestionCard";
 import GapDetectionCard from "./GapDetectionCard";
 import LearnCard from "./LearnCard";
 import ConversationPanel from "@/components/ConversationPanel";
+import KnowledgeGainedCard from "./KnowledgeGainedCard";
+import SimilarDetectedCard from "./SimilarDetectedCard";
 
 interface CopilotPanelProps {
   events: CopilotEvent[];
@@ -83,6 +85,10 @@ export default function CopilotPanel({
             onReject={onRejectDraft}
           />
         );
+      case "knowledge_gained":
+        return <KnowledgeGainedCard key={event.id} data={event.data} />;
+      case "similar_detected":
+        return <SimilarDetectedCard key={event.id} data={event.data} />;
       default:
         return null;
     }
@@ -118,7 +124,7 @@ export default function CopilotPanel({
       </div>
 
       {/* Timeline */}
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
         {events.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <div className="flex h-12 w-12 items-center justify-center bg-muted">

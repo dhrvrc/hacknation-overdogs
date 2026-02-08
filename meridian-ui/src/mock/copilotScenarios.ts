@@ -8,6 +8,8 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import type { KnowledgeGraphNode, KnowledgeGraphEdge } from "./customerProfiles";
+
 // ── Types ────────────────────────────────────────────────────
 
 export type CopilotEventType =
@@ -17,7 +19,9 @@ export type CopilotEventType =
   | "ticket_result"
   | "suggestion"
   | "gap_detection"
-  | "learn";
+  | "learn"
+  | "knowledge_gained"
+  | "similar_detected";
 
 export interface CopilotEvent {
   id: string;
@@ -85,6 +89,14 @@ export interface CopilotScenario {
   ticketNumber?: string;
   /** Whether this scenario demonstrates the gap detection + learning flow */
   isGapScenario: boolean;
+
+  /** Knowledge graph updates triggered during conversation */
+  graphUpdates?: Array<{
+    afterMessageIndex: number;
+    delayMs: number;
+    newNodes: KnowledgeGraphNode[];
+    newEdges: KnowledgeGraphEdge[];
+  }>;
 }
 
 // ── Scenario 1: Date Advance (KB + Script match) ────────────

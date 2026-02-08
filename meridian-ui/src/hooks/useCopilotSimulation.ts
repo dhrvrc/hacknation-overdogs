@@ -13,6 +13,7 @@ import {
   buildGapEvents,
   buildLearnEvents,
 } from "@/lib/buildCopilotEvents";
+import type { KnowledgeGraphUpdate, CustomerNote } from "@/mock/customerProfiles";
 
 // ── Public state & actions interfaces ────────────────────────
 
@@ -35,6 +36,10 @@ export interface SimulationState {
   isResolved: boolean;
   currentMessageIndex: number;
   activeConversation: ConversationData | null;
+  /** Accumulated knowledge graph updates from the conversation */
+  graphUpdates: KnowledgeGraphUpdate[];
+  /** Agent notes added during the session */
+  customerNotes: CustomerNote[];
 }
 
 export interface SimulationActions {
@@ -48,6 +53,8 @@ export interface SimulationActions {
   rejectDraft: (draftId: string) => void;
   loadConversation: (ticketNumber: string) => void;
   closeConversation: () => void;
+  /** Add a note to the customer record */
+  addNote: (text: string) => void;
 }
 
 // ── Hook ─────────────────────────────────────────────────────
@@ -63,6 +70,8 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
   const [suggestedText, setSuggestedText] = useState("");
   const [activeConversation, setActiveConversation] =
     useState<ConversationData | null>(null);
+  const [graphUpdates, setGraphUpdates] = useState<KnowledgeGraphUpdate[]>([]);
+  const [customerNotes, setCustomerNotes] = useState<CustomerNote[]>([]);
 
   // Refs for timeout management and avoiding stale closures
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -221,6 +230,19 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
           setSuggestedReplies(repliesTrigger.replies);
         }, 1500);
       }
+
+      // Process knowledge graph updates
+      const graphTrigger = sc.graphUpdates?.find(
+        (g) => g.afterMessageIndex === msgIndex
+      );
+      if (graphTrigger) {
+        addTimeout(() => {
+          setGraphUpdates((prev) => [
+            ...prev,
+            { nodes: graphTrigger.newNodes, edges: graphTrigger.newEdges },
+          ]);
+        }, graphTrigger.delayMs || 1500);
+      }
     },
     [triggerQuerySearch, triggerFollowUp, addTimeout]
   );
@@ -298,6 +320,8 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
       setIsResolved(false);
       setCurrentMessageIndex(-1);
       setSuggestedText("");
+      setGraphUpdates([]);
+      setCustomerNotes([]);
       setScenario(sc);
       setIsPlaying(true);
 
@@ -467,7 +491,20 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
     setIsResolved(false);
     setCurrentMessageIndex(-1);
     setSuggestedText("");
+    setGraphUpdates([]);
+    setCustomerNotes([]);
   }, [clearAllTimeouts]);
+
+  // Add a note to the customer record
+  const addNote = useCallback((text: string) => {
+    const note: CustomerNote = {
+      id: `note-${Date.now()}`,
+      text,
+      author: scenarioRef.current?.agent.name || "Agent",
+      timestamp: new Date().toISOString(),
+    };
+    setCustomerNotes((prev) => [...prev, note]);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -483,6 +520,8 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
     isResolved,
     currentMessageIndex,
     activeConversation,
+    graphUpdates,
+    customerNotes,
   };
 
   const actions: SimulationActions = {
@@ -496,6 +535,7 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
     rejectDraft,
     loadConversation,
     closeConversation,
+    addNote,
   };
 
   return [state, actions];
