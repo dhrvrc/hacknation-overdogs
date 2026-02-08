@@ -427,7 +427,7 @@ export default function QAScoreForm({
   const isLoading = loading || aiLoading;
 
   return (
-    <div className="rounded-[14px] border border-border bg-card p-6 space-y-5 overflow-auto max-h-[calc(100vh-200px)]">
+    <div className="rounded-[14px] border border-border bg-card p-6 space-y-5 overflow-auto max-h-[calc(100svh-12rem)]">
       {/* Mode tabs */}
       <div className="flex items-center gap-1 rounded-full bg-muted p-1">
         {[

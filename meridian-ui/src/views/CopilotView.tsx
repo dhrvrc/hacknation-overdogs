@@ -14,7 +14,7 @@ export default function CopilotView() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: easeOut }}
-      className="h-[calc(100vh-6rem)]"
+      className="h-[calc(100svh-5rem)]"
     >
       {/* Two-panel layout: Left = AI Copilot (38%), Right = Live Channel (62%) */}
       <div className="grid h-full grid-cols-1 gap-0 overflow-hidden border border-border lg:grid-cols-[38%_1fr]">

@@ -270,7 +270,7 @@ export default function QAScoreReport({ data }: { data: any | null }) {
   }
 
   return (
-    <div className="rounded-[14px] border border-border bg-background p-6 space-y-6 overflow-auto max-h-[calc(100vh-200px)]">
+    <div className="rounded-[14px] border border-border bg-background p-6 space-y-6 overflow-auto max-h-[calc(100svh-12rem)]">
       {/* ── Header: Score + Mode ─────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-5">
