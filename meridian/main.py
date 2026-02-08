@@ -63,15 +63,17 @@ def boot():
     return ds, vs, prov, gap, gen, evl
 
 
-def run_learning_pipeline(ds, vs, gap, gen, auto_approve=True):
+def run_learning_pipeline(ds, vs, gap, gen, auto_approve=True, max_drafts=3):
     """
     Run the self-learning pipeline end-to-end:
       1. Scan all tickets for knowledge gaps
       2. Filter to tickets that don't already have a generated KB article
-      3. Generate KB drafts for each gap
+      3. Generate KB drafts for each gap (capped at max_drafts for speed)
       4. Optionally auto-approve and add to the vector store
     Returns: dict with pipeline stats and list of generated documents
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     logger.info("=" * 70)
     logger.info("Running Self-Learning Pipeline")
     logger.info("=" * 70)
@@ -91,21 +93,36 @@ def run_learning_pipeline(ds, vs, gap, gen, auto_approve=True):
             'Ticket_Number'
         ].tolist()
     )
-    new_gaps = [g for g in gaps if g.ticket_number not in tickets_with_kb]
-    logger.info(f"  {len(gaps) - len(new_gaps)} gaps already have KB articles")
-    logger.info(f"  {len(new_gaps)} new gaps to process")
+    new_gaps_all = [g for g in gaps if g.ticket_number not in tickets_with_kb]
+    # Deduplicate by ticket number (gap scanner can return multiple entries per ticket)
+    seen_tickets = set()
+    new_gaps = []
+    for g in new_gaps_all:
+        if g.ticket_number not in seen_tickets:
+            seen_tickets.add(g.ticket_number)
+            new_gaps.append(g)
+    logger.info(f"  {len(gaps) - len(new_gaps_all)} gaps already have KB articles")
+    logger.info(f"  {len(new_gaps)} unique new gaps, generating up to {max_drafts}")
 
-    # 3. Generate drafts
-    logger.info("Step 2: Generating KB drafts...")
+    # 3. Generate drafts (capped + parallel)
+    gaps_to_process = new_gaps[:max_drafts]
+    logger.info(f"Step 2: Generating {len(gaps_to_process)} KB drafts (parallel)...")
     drafts = []
     failed = []
-    for g in new_gaps:
-        try:
-            draft = gen.generate_draft(g.ticket_number)
-            drafts.append(draft)
-        except Exception as e:
-            logger.warning(f"  Failed to generate draft for {g.ticket_number}: {e}")
-            failed.append(g.ticket_number)
+
+    def _gen_one(ticket_number):
+        return gen.generate_draft(ticket_number)
+
+    with ThreadPoolExecutor(max_workers=min(len(gaps_to_process), 5) or 1) as pool:
+        futures = {pool.submit(_gen_one, g.ticket_number): g for g in gaps_to_process}
+        for fut in as_completed(futures):
+            g = futures[fut]
+            try:
+                draft = fut.result()
+                drafts.append(draft)
+            except Exception as e:
+                logger.warning(f"  Failed to generate draft for {g.ticket_number}: {e}")
+                failed.append(g.ticket_number)
 
     logger.info(f"  Generated {len(drafts)} drafts ({len(failed)} failed)")
 
@@ -185,6 +202,7 @@ if __name__ == "__main__":
     parser.add_argument("--query", type=str, default=None, help="Run a single query")
     parser.add_argument("--eval-sample", action="store_true", help="Run eval on 100 questions (fast)")
     parser.add_argument("--learn", action="store_true", help="Run self-learning pipeline (gap detection + KB generation)")
+    parser.add_argument("--max-drafts", type=int, default=3, help="Max KB drafts to generate (default 3, use 0 for all)")
     args = parser.parse_args()
 
     # Boot engine
@@ -227,7 +245,8 @@ if __name__ == "__main__":
         print("Gap Detection -> KB Generation -> Indexing")
         print("=" * 70)
 
-        pipeline_result = run_learning_pipeline(ds, vs, gap, gen, auto_approve=True)
+        max_d = args.max_drafts if args.max_drafts > 0 else 999
+        pipeline_result = run_learning_pipeline(ds, vs, gap, gen, auto_approve=True, max_drafts=max_d)
         stats = pipeline_result['stats']
 
         print("\n" + "=" * 70)
