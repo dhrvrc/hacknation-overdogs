@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meridian - Self-Learning AI for Support</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            overflow: hidden;
+        }
+
+        .slide-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .slide {
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 80px;
+            text-align: center;
+        }
+
+        .slide.active {
+            display: flex;
+        }
+
+        h1 {
+            font-size: 72px;
+            font-weight: 700;
+            margin-bottom: 40px;
+            line-height: 1.2;
+            color: #60a5fa;
+        }
+
+        h2 {
+            font-size: 48px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            line-height: 1.3;
+        }
+
+        .subtitle {
+            font-size: 36px;
+            color: #94a3b8;
+            margin-bottom: 20px;
+        }
+
+        .tagline {
+            font-size: 28px;
+            color: #cbd5e1;
+            margin-top: 20px;
+            font-style: italic;
+        }
+
+        .team {
+            font-size: 24px;
+            color: #64748b;
+            margin-top: 60px;
+        }
+
+        .bullet-list {
+            text-align: left;
+            max-width: 1200px;
+            margin: 40px auto;
+        }
+
+        .bullet-list li {
+            font-size: 32px;
+            line-height: 1.8;
+            margin-bottom: 24px;
+            list-style: none;
+            padding-left: 40px;
+            position: relative;
+        }
+
+        .bullet-list li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #60a5fa;
+            font-weight: bold;
+        }
+
+        .closing-line {
+            font-size: 36px;
+            color: #60a5fa;
+            margin-top: 40px;
+            font-weight: 600;
+        }
+
+        /* Architecture diagram */
+        .architecture {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 60px;
+            margin: 60px 0;
+        }
+
+        .arch-box {
+            background: #1e293b;
+            border: 3px solid #334155;
+            border-radius: 12px;
+            padding: 40px 50px;
+            min-width: 280px;
+            position: relative;
+        }
+
+        .arch-box.copilot {
+            border-color: #60a5fa;
+        }
+
+        .arch-box.engine {
+            border-color: #f59e0b;
+        }
+
+        .arch-box.dashboard {
+            border-color: #10b981;
+        }
+
+        .arch-box h3 {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #f8fafc;
+        }
+
+        .arch-box ul {
+            list-style: none;
+            font-size: 20px;
+            color: #cbd5e1;
+        }
+
+        .arch-box ul li {
+            margin: 10px 0;
+        }
+
+        .arch-arrow {
+            font-size: 48px;
+            color: #60a5fa;
+        }
+
+        .arch-tagline {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 40px;
+            font-size: 28px;
+            color: #94a3b8;
+        }
+
+        .arch-tagline span {
+            padding: 0 20px;
+        }
+
+        /* Results section */
+        .results {
+            text-align: left;
+            max-width: 1000px;
+            margin: 40px auto;
+        }
+
+        .results h3 {
+            font-size: 36px;
+            color: #60a5fa;
+            margin: 30px 0 20px 0;
+        }
+
+        .results p {
+            font-size: 28px;
+            line-height: 1.8;
+            margin: 12px 0;
+            padding-left: 30px;
+        }
+
+        .highlight {
+            color: #22c55e;
+            font-weight: 600;
+        }
+
+        /* Slide counter */
+        .slide-counter {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            font-size: 24px;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        /* Navigation hint */
+        .nav-hint {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            font-size: 18px;
+            color: #475569;
+        }
+
+        /* Live demo slide */
+        .demo-title {
+            font-size: 96px;
+            color: #60a5fa;
+            margin-bottom: 60px;
+        }
+
+        .demo-subtitle {
+            font-size: 40px;
+            color: #cbd5e1;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <!-- Slide 1: Title -->
+        <div class="slide active">
+            <h1>MERIDIAN</h1>
+            <div class="subtitle">Self-Learning AI for Support</div>
+            <div class="tagline">"OpenEvidence for Support Agents"</div>
+            <p style="font-size: 32px; color: #cbd5e1; margin-top: 60px; max-width: 900px;">
+                Evidence-grounded answers that get smarter from every interaction.
+            </p>
+            <div class="team">Team: Overdogs</div>
+        </div>
+
+        <!-- Slide 2: The Problem -->
+        <div class="slide">
+            <h2>Support knowledge is trapped.</h2>
+            <ul class="bullet-list">
+                <li>3,207 KB articles, but 95% lack metadata, tags, or update dates.</li>
+                <li>714 scripts exist but agents can't find the right one in real time.</li>
+                <li>When agents solve new problems, that knowledge disappears.</li>
+                <li>Every resolved ticket is a lesson the organization never learns.</li>
+            </ul>
+            <div class="closing-line">Meridian turns every resolution into institutional memory.</div>
+        </div>
+
+        <!-- Slide 3: Architecture -->
+        <div class="slide">
+            <h2>Three Surfaces, One Loop</h2>
+            <div class="architecture">
+                <div class="arch-box copilot">
+                    <h3>COPILOT</h3>
+                    <ul>
+                        <li>Evidence-grounded</li>
+                        <li>answers</li>
+                    </ul>
+                </div>
+                <div class="arch-arrow">→</div>
+                <div class="arch-box engine">
+                    <h3>LEARNING ENGINE</h3>
+                    <ul>
+                        <li>Gap Detection</li>
+                        <li>KB Generation</li>
+                        <li>Auto-indexing</li>
+                    </ul>
+                </div>
+                <div class="arch-arrow">→</div>
+                <div class="arch-box dashboard">
+                    <h3>DASHBOARD</h3>
+                    <ul>
+                        <li>Knowledge Health</li>
+                        <li>QA Scoring</li>
+                        <li>Emerging Issues</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="arch-tagline">
+                <span>Copilot creates value.</span>
+                <span>Learning Engine compounds it.</span>
+                <span>Dashboard governs it.</span>
+            </div>
+        </div>
+
+        <!-- Slide 4: Live Demo -->
+        <div class="slide">
+            <div class="demo-title">LIVE DEMO</div>
+            <div class="demo-subtitle">"Watch the system learn something it's never seen before."</div>
+        </div>
+
+        <!-- Slide 5: The Numbers -->
+        <div class="slide">
+            <h2>Results</h2>
+            <div class="results">
+                <h3>Retrieval Accuracy:</h3>
+                <p>hit@1: <span class="highlight">[X%]</span> → hit@5: <span class="highlight">[Y%]</span> → hit@10: <span class="highlight">[Z%]</span></p>
+
+                <h3>Self-Learning Proof:</h3>
+                <p>Before learning: hit@5 = <span class="highlight">[A%]</span></p>
+                <p>After learning: hit@5 = <span class="highlight">[B%]</span> <span style="color: #22c55e;">(▲ +[C] pp)</span></p>
+                <p><span class="highlight">134</span> knowledge gaps closed</p>
+
+                <h3>Live Demo:</h3>
+                <p>Novel issue (Report Export Failure) → 0 KB coverage</p>
+                <p>→ Gap detected → KB drafted → Approved → Retrieved</p>
+                <p style="color: #22c55e; font-weight: 600;">All in &lt; 60 seconds.</p>
+            </div>
+        </div>
+
+        <!-- Slide 6: Enterprise Vision -->
+        <div class="slide">
+            <h2>In production, Meridian would:</h2>
+            <ul class="bullet-list">
+                <li>Ingest live ticket feeds via Salesforce/Zendesk webhook</li>
+                <li>Auto-detect emerging issues across the entire support org</li>
+                <li>Generate KB articles reviewed by senior agents</li>
+                <li>Score every interaction against the QA rubric</li>
+                <li>Surface compliance violations before they escalate</li>
+                <li>Reduce mean time to resolution by giving agents the right answer first</li>
+            </ul>
+            <div class="closing-line" style="margin-top: 60px;">
+                Every answer comes with a citation.<br>
+                Nothing is a black box.
+            </div>
+        </div>
+    </div>
+
+    <div class="slide-counter">
+        <span id="current-slide">1</span> / 6
+    </div>
+
+    <div class="nav-hint">
+        ← → to navigate
+    </div>
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+
+        function showSlide(n) {
+            slides[currentSlide].classList.remove('active');
+            currentSlide = (n + totalSlides) % totalSlides;
+            slides[currentSlide].classList.add('active');
+            document.getElementById('current-slide').textContent = currentSlide + 1;
+        }
+
+        function nextSlide() {
+            showSlide(currentSlide + 1);
+        }
+
+        function prevSlide() {
+            showSlide(currentSlide - 1);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                prevSlide();
+            }
+        });
+
+        // Also support click navigation
+        document.addEventListener('click', (e) => {
+            if (e.clientX > window.innerWidth / 2) {
+                nextSlide();
+            } else {
+                prevSlide();
+            }
+        });
+    </script>
+</body>
+</html>

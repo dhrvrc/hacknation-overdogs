@@ -1,0 +1,19 @@
+# Meridian API Server Dependencies
+# Install: pip install -r requirements.txt
+
+# API Framework
+fastapi
+uvicorn
+pydantic
+
+# HTTP client for smoke tests
+requests
+
+# Data Processing (for Person 1's engine - when available)
+pandas
+openpyxl
+numpy
+scikit-learn
+
+# LLM Integration (optional - for QA scoring and KB generation)
+anthropic
