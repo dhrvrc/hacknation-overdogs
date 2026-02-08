@@ -5,4 +5,4 @@ meridian/engine/__pycache__/
 meridian/server/__pycache__/
 .embeddings_cache.npy
 .embeddings_cache_ids.json
-.chromadb_store/
+.env

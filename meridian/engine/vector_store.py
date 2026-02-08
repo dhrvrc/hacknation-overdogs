@@ -16,6 +16,8 @@ import chromadb
 from .data_loader import Document
 from ..config import OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, CHROMADB_PERSIST_DIR
 
+_QUERY_CACHE_FILE = os.path.join(CHROMADB_PERSIST_DIR, "query_embedding_cache.npz")
+
 logger = logging.getLogger(__name__)
 
 # OpenAI limits to 300K tokens per request and 8191 tokens per text.
@@ -61,13 +63,55 @@ class VectorStore:
         self.documents: List[Document] = []
         self.doc_index: Dict[str, Document] = {}  # doc_id -> Document
         self.is_built = False
-        self._query_cache: Dict[str, np.ndarray] = {}  # text -> embedding vector (in-memory)
+        self._query_cache: Dict[str, np.ndarray] = {}  # text -> embedding vector
+        self._query_cache_dirty = 0  # count of unsaved entries
+        self._load_query_cache()
 
     @property
     def embedding_matrix(self):
         """Backward-compatible property for code accessing .embedding_matrix.shape"""
         count = self.collection.count() if self.collection else 0
         return _EmbeddingMatrixShim(count, EMBEDDING_DIMENSIONS)
+
+    def _load_query_cache(self):
+        """Load query embedding cache from disk if it exists and model matches."""
+        if not os.path.exists(_QUERY_CACHE_FILE):
+            return
+        try:
+            data = np.load(_QUERY_CACHE_FILE, allow_pickle=True)
+            if data.get("model", "") != self.embedding_model:
+                logger.info("  Query cache model mismatch, ignoring disk cache")
+                return
+            keys = list(data["keys"])
+            vectors = data["vectors"]
+            for key, vec in zip(keys, vectors):
+                self._query_cache[key] = vec.reshape(1, -1)
+            logger.info(f"  Loaded {len(keys)} cached query embeddings from disk")
+        except Exception as e:
+            logger.warning(f"  Could not load query cache: {e}")
+
+    def _save_query_cache(self):
+        """Persist query embedding cache to disk."""
+        if not self._query_cache:
+            return
+        try:
+            os.makedirs(os.path.dirname(_QUERY_CACHE_FILE), exist_ok=True)
+            keys = list(self._query_cache.keys())
+            vectors = np.array([self._query_cache[k][0] for k in keys], dtype=np.float32)
+            np.savez(
+                _QUERY_CACHE_FILE,
+                keys=np.array(keys, dtype=object),
+                vectors=vectors,
+                model=np.array(self.embedding_model),
+            )
+        except Exception as e:
+            logger.warning(f"  Could not save query cache: {e}")
+
+    def flush_query_cache(self):
+        """Flush any unsaved query embeddings to disk."""
+        if self._query_cache_dirty > 0:
+            self._save_query_cache()
+            self._query_cache_dirty = 0
 
     def _embed_texts(self, texts: List[str]) -> np.ndarray:
         """
@@ -111,6 +155,10 @@ class VectorStore:
 
         vec = self._embed_texts([text])
         self._query_cache[cache_key] = vec
+        self._query_cache_dirty += 1
+        if self._query_cache_dirty >= 100:
+            self._save_query_cache()
+            self._query_cache_dirty = 0
         return vec
 
     def _compute_fingerprint(self, doc_ids: List[str]) -> str:

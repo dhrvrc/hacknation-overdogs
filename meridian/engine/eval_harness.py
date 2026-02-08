@@ -372,6 +372,9 @@ class EvalHarness:
         classification = self.eval_classification()
         before_after = self.eval_before_after()
 
+        # Flush cached query embeddings to disk for next run
+        self.vs.flush_query_cache()
+
         elapsed = time.time() - t0
 
         print(f"\n{'=' * 70}")
