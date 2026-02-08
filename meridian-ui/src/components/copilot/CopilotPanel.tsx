@@ -9,6 +9,8 @@ import KBResultCard from "./KBResultCard";
 import SuggestionCard from "./SuggestionCard";
 import GapDetectionCard from "./GapDetectionCard";
 import LearnCard from "./LearnCard";
+import KnowledgeGainedCard from "./KnowledgeGainedCard";
+import SimilarDetectedCard from "./SimilarDetectedCard";
 
 interface CopilotPanelProps {
   events: CopilotEvent[];
@@ -68,6 +70,10 @@ export default function CopilotPanel({
             onReject={onRejectDraft}
           />
         );
+      case "knowledge_gained":
+        return <KnowledgeGainedCard key={event.id} data={event.data} />;
+      case "similar_detected":
+        return <SimilarDetectedCard key={event.id} data={event.data} />;
       default:
         return null;
     }
@@ -75,33 +81,6 @@ export default function CopilotPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex h-6 w-6 items-center justify-center bg-gradient-to-br from-violet-500 to-blue-500">
-            <svg
-              className="h-3.5 w-3.5 text-white"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <h2 className="text-sm font-semibold text-foreground">AI Copilot</h2>
-        </div>
-        {isActive && (
-          <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            Live
-          </span>
-        )}
-      </div>
-
       {/* Timeline */}
       <div className="flex-1 overflow-y-auto px-3 py-3">
         {events.length === 0 ? (

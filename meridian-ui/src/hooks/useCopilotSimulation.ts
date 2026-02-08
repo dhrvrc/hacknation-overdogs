@@ -7,6 +7,7 @@ import {
   type CopilotEvent,
   type ChatMessage,
 } from "@/mock/copilotScenarios";
+import type { KnowledgeGraphUpdate, CustomerNote } from "@/mock/customerProfiles";
 
 // ── Public timeline item (message or copilot event) ──────────
 
@@ -36,6 +37,10 @@ export interface SimulationState {
   isResolved: boolean;
   /** The current message index in the scenario */
   currentMessageIndex: number;
+  /** Accumulated knowledge graph updates from the conversation */
+  graphUpdates: KnowledgeGraphUpdate[];
+  /** Agent notes added during the session */
+  customerNotes: CustomerNote[];
 }
 
 export interface SimulationActions {
@@ -55,6 +60,8 @@ export interface SimulationActions {
   approveDraft: (draftId: string) => void;
   /** Reject a KB draft */
   rejectDraft: (draftId: string) => void;
+  /** Add a note to the customer record */
+  addNote: (text: string) => void;
 }
 
 export function useCopilotSimulation(): [SimulationState, SimulationActions] {
@@ -66,6 +73,8 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
   const [isResolved, setIsResolved] = useState(false);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(-1);
   const [suggestedText, setSuggestedText] = useState("");
+  const [graphUpdates, setGraphUpdates] = useState<KnowledgeGraphUpdate[]>([]);
+  const [customerNotes, setCustomerNotes] = useState<CustomerNote[]>([]);
 
   // Refs for timeout management
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -122,6 +131,20 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
         const t = setTimeout(() => {
           setSuggestedReplies(repliesTrigger.replies);
         }, cumulativeDelay + 200);
+        timeoutsRef.current.push(t);
+      }
+
+      // Process knowledge graph updates
+      const graphTrigger = sc.graphUpdates?.find(
+        (g) => g.afterMessageIndex === msgIndex
+      );
+      if (graphTrigger) {
+        const t = setTimeout(() => {
+          setGraphUpdates((prev) => [
+            ...prev,
+            { nodes: graphTrigger.newNodes, edges: graphTrigger.newEdges },
+          ]);
+        }, cumulativeDelay + (graphTrigger.delayMs || 0));
         timeoutsRef.current.push(t);
       }
     },
@@ -201,6 +224,8 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
       setIsResolved(false);
       setCurrentMessageIndex(-1);
       setSuggestedText("");
+      setGraphUpdates([]);
+      setCustomerNotes([]);
       setScenario(sc);
       setIsPlaying(true);
 
@@ -269,6 +294,8 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
     setIsResolved(false);
     setCurrentMessageIndex(-1);
     setSuggestedText("");
+    setGraphUpdates([]);
+    setCustomerNotes([]);
   }, [clearAllTimeouts]);
 
   // Approve draft
@@ -280,6 +307,17 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
           : e
       )
     );
+  }, []);
+
+  // Add a note to the customer record
+  const addNote = useCallback((text: string) => {
+    const note: CustomerNote = {
+      id: `note-${Date.now()}`,
+      text,
+      author: scenarioRef.current?.agent.name || "Agent",
+      timestamp: new Date().toISOString(),
+    };
+    setCustomerNotes((prev) => [...prev, note]);
   }, []);
 
   // Reject draft
@@ -306,6 +344,8 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
     isPlaying,
     isResolved,
     currentMessageIndex,
+    graphUpdates,
+    customerNotes,
   };
 
   const actions: SimulationActions = {
@@ -317,6 +357,7 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
     suggestedText,
     approveDraft,
     rejectDraft,
+    addNote,
   };
 
   return [state, actions];

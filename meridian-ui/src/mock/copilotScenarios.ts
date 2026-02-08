@@ -10,6 +10,7 @@ import {
   mockQueryResponse,
   mockKBQueryResponse,
 } from "./mockData";
+import type { KnowledgeGraphNode, KnowledgeGraphEdge } from "./customerProfiles";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -20,7 +21,9 @@ export type CopilotEventType =
   | "ticket_result"
   | "suggestion"
   | "gap_detection"
-  | "learn";
+  | "learn"
+  | "knowledge_gained"
+  | "similar_detected";
 
 export interface CopilotEvent {
   id: string;
@@ -65,6 +68,13 @@ export interface CopilotScenario {
     replies: string[];
   }>;
   hasKBMatch: boolean;
+  /** Knowledge graph updates triggered during conversation */
+  graphUpdates?: Array<{
+    afterMessageIndex: number;
+    delayMs: number;
+    newNodes: KnowledgeGraphNode[];
+    newEdges: KnowledgeGraphEdge[];
+  }>;
 }
 
 // ── Scenario 1: Date Advance (KB + Script match) ────────────
@@ -197,6 +207,17 @@ const scenario1: CopilotScenario = {
           delayMs: 300,
           data: {
             results: mockQueryResponse.secondary_results.TICKET,
+          },
+        },
+        {
+          id: "t1-similar-1",
+          type: "similar_detected",
+          delayMs: 300,
+          data: {
+            similarTicketId: "CS-38908386",
+            similarity: 0.89,
+            description: "This customer reported the exact same Date Advance issue on Feb 19, 2025. Resolved via backend data fix with SCRIPT-0293.",
+            conversationId: "CONV-O2RAK1VRJN",
           },
         },
         {
@@ -626,6 +647,18 @@ const scenario3: CopilotScenario = {
             summary: "CSV imports of 50+ resident records timeout due to server-side request limits. Workaround: split into batches of 25-30 records. Affects PropertySuite 8.4.2+ on all browsers. Product improvement request filed for async background imports.",
           },
         },
+        {
+          id: "t3-knowledge-1",
+          type: "knowledge_gained",
+          delayMs: 500,
+          data: {
+            title: "Bulk Import Timeout Threshold",
+            description: "Learned that PropertySuite 8.4.2 CSV imports timeout at 50+ records. Optimal batch size is 25-30 records. Server-side timeout is the root cause.",
+            source: "Current conversation resolution",
+            category: "Residents / Import",
+            confidence: 0.92,
+          },
+        },
       ],
     },
   ],
@@ -653,6 +686,22 @@ const scenario3: CopilotScenario = {
     },
   ],
   hasKBMatch: false,
+  graphUpdates: [
+    {
+      afterMessageIndex: 4,
+      delayMs: 1500,
+      newNodes: [
+        { id: "CS-NEW-IMPORT", type: "ticket" as const, label: "Bulk Import Timeout", metadata: { tier: "1", status: "Open" } },
+        { id: "KB-DRAFT-004", type: "kb" as const, label: "Import Timeout KB (Draft)", metadata: { status: "Pending" } },
+        { id: "CONV-IMPORT-001", type: "conversation" as const, label: "Chat: Import Issue" },
+      ],
+      newEdges: [
+        { source: "cust-003", target: "CS-NEW-IMPORT", relationship: "OPENED" },
+        { source: "CS-NEW-IMPORT", target: "KB-DRAFT-004", relationship: "GENERATING" },
+        { source: "CS-NEW-IMPORT", target: "CONV-IMPORT-001", relationship: "HAS_CONVERSATION" },
+      ],
+    },
+  ],
 };
 
 // ── Export ────────────────────────────────────────────────────
