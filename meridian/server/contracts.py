@@ -112,6 +112,14 @@ class PendingDraft(BaseModel):
     generated_at: str  # ISO 8601
 
 
+class RecentActivityItem(BaseModel):
+    """A recent learning event (approved/rejected KB article)."""
+    id: str
+    status: str  # "approved" | "rejected"
+    date: str
+    role: str
+
+
 class LearningPipeline(BaseModel):
     """Learning pipeline statistics."""
     total_events: int
@@ -119,6 +127,7 @@ class LearningPipeline(BaseModel):
     rejected: int
     pending: int
     pending_drafts: List[PendingDraft]
+    recent_activity: List[RecentActivityItem] = Field(default_factory=list)
 
 
 class TicketStats(BaseModel):

@@ -1,20 +1,25 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Search,
-  Shield,
+  Play,
+  RotateCcw,
+  CheckCircle2,
+  Circle,
+  Loader2,
+  AlertTriangle,
   Brain,
-  MessageCircle,
-  BarChart3,
-  Lock,
+  Search,
+  FileText,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
-import { BentoGrid, BentoCell } from "@/components/BentoGrid";
 import LottieAnimation from "@/components/LottieAnimation";
-import TestimonialCarousel from "@/components/TestimonialCarousel";
-import PricingSection from "@/components/PricingSection";
-
+import * as api from "@/lib/api";
 import { easeOut } from "@/lib/utils";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 const fadeInUp = {
   initial: { opacity: 0, y: 20 },
@@ -23,37 +28,168 @@ const fadeInUp = {
   transition: { duration: 0.5, ease: easeOut },
 };
 
-/* Placeholder logos for the trust bar */
-const logos = [
-  "Zendesk",
-  "Salesforce",
-  "Intercom",
-  "Slack",
-  "Jira",
-  "HubSpot",
-];
+// ── Step definitions ────────────────────────────────────────
+
+interface DemoStep {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  action: () => Promise<any>;
+}
+
+type StepStatus = "idle" | "running" | "done" | "error";
+
+// ── Main Component ──────────────────────────────────────────
 
 export default function DemoView() {
+  const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus>>({});
+  const [stepResults, setStepResults] = useState<Record<string, any>>({});
+  const [runningAll, setRunningAll] = useState(false);
+
+  const steps: DemoStep[] = [
+    {
+      id: "inject",
+      title: "Inject Synthetic Tickets",
+      description: "Add 6 novel \"Report Export Failure\" tickets to the system.",
+      icon: <FileText className="h-4 w-4" />,
+      action: api.demoInject,
+    },
+    {
+      id: "gaps",
+      title: "Detect Knowledge Gaps",
+      description: "Run gap detection — compare each ticket against the KB corpus.",
+      icon: <Search className="h-4 w-4" />,
+      action: api.demoDetectGaps,
+    },
+    {
+      id: "emerging",
+      title: "Flag Emerging Issue",
+      description: "Cluster the gaps by category/module to detect a new pattern.",
+      icon: <AlertTriangle className="h-4 w-4" />,
+      action: api.demoDetectEmerging,
+    },
+    {
+      id: "draft",
+      title: "Generate KB Draft",
+      description: "Use the LLM to draft a new knowledge article from the first ticket.",
+      icon: <Brain className="h-4 w-4" />,
+      action: api.demoGenerateDraft,
+    },
+    {
+      id: "approve",
+      title: "Approve & Index",
+      description: "Approve the draft and add it to the retrieval index.",
+      icon: <ShieldCheck className="h-4 w-4" />,
+      action: api.demoApprove,
+    },
+    {
+      id: "verify",
+      title: "Verify Retrieval",
+      description: "Query the copilot — the new article should now appear in results.",
+      icon: <Sparkles className="h-4 w-4" />,
+      action: api.demoVerify,
+    },
+  ];
+
+  async function runStep(step: DemoStep) {
+    setStepStatuses((prev) => ({ ...prev, [step.id]: "running" }));
+    try {
+      const result = await step.action();
+      setStepResults((prev) => ({ ...prev, [step.id]: result }));
+      setStepStatuses((prev) => ({ ...prev, [step.id]: "done" }));
+      return true;
+    } catch {
+      setStepStatuses((prev) => ({ ...prev, [step.id]: "error" }));
+      return false;
+    }
+  }
+
+  async function runAll() {
+    setRunningAll(true);
+    // Reset first
+    try {
+      await api.demoReset();
+    } catch {
+      // ignore reset errors
+    }
+    setStepStatuses({});
+    setStepResults({});
+
+    for (const step of steps) {
+      const ok = await runStep(step);
+      if (!ok) break;
+    }
+    setRunningAll(false);
+  }
+
+  async function handleReset() {
+    try {
+      await api.demoReset();
+    } catch {
+      // ignore
+    }
+    setStepStatuses({});
+    setStepResults({});
+  }
+
+  function getStepIcon(stepId: string, defaultIcon: React.ReactNode) {
+    const status = stepStatuses[stepId];
+    if (status === "running") return <Loader2 className="h-4 w-4 animate-spin" />;
+    if (status === "done") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+    if (status === "error") return <AlertTriangle className="h-4 w-4 text-red-500" />;
+    return defaultIcon;
+  }
+
+  function formatResult(stepId: string): string | null {
+    const result = stepResults[stepId];
+    if (!result) return null;
+
+    switch (stepId) {
+      case "inject": {
+        const count = result?.injected_tickets?.length ?? 0;
+        return `${count} tickets injected into the system.`;
+      }
+      case "gaps": {
+        const gaps = result?.gap_results ?? [];
+        const gapCount = gaps.filter((g: any) => g.is_gap).length;
+        return `${gapCount}/${gaps.length} tickets flagged as knowledge gaps.`;
+      }
+      case "emerging": {
+        const issues = result?.emerging_issues ?? [];
+        return issues.length > 0
+          ? `${issues.length} emerging issue(s): ${issues.map((i: any) => `${i.category} / ${i.module}`).join(", ")}`
+          : "No emerging issues detected.";
+      }
+      case "draft": {
+        const draftId = result?.generated_draft_id;
+        return draftId ? `Draft ${draftId} generated.` : "KB draft created.";
+      }
+      case "approve": {
+        const docId = result?.approved_doc_id;
+        return docId ? `Article ${docId} approved and indexed.` : "Article approved.";
+      }
+      case "verify": {
+        const verification = result?.verification ?? [];
+        const found = verification.filter((v: any) => v.found_new_article).length;
+        return `New article found in ${found}/${verification.length} queries.`;
+      }
+      default:
+        return null;
+    }
+  }
+
   return (
     <div className="overflow-hidden">
-      {/* =============================================
-          Section A — Hero
-          ============================================= */}
-      <section className="relative min-h-screen flex items-center justify-center texture-dots">
-        {/* Gradient wash overlay */}
+      {/* ── Hero Section ── */}
+      <section className="relative flex items-center justify-center texture-dots py-20">
         <div className="absolute inset-0 gradient-wash pointer-events-none" />
         <div className="absolute inset-0 texture-noise pointer-events-none" />
-
-        {/* Background Lottie */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-30">
-          <LottieAnimation
-            src="/lottie/particles.json"
-            width={500}
-            height={400}
-          />
+          <LottieAnimation src="/lottie/particles.json" width={500} height={400} />
         </div>
 
-        <div className="relative z-10 mx-auto max-w-[1280px] px-6 py-20 md:px-12 lg:px-16 text-center">
+        <div className="relative z-10 mx-auto max-w-[1280px] px-6 md:px-12 lg:px-16 text-center">
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -62,365 +198,132 @@ export default function DemoView() {
           >
             Support intelligence that learns from every interaction.
           </motion.h1>
-
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: 0.5,
-              delay: 0.2,
-              ease: easeOut,
-            }}
+            transition={{ duration: 0.5, delay: 0.2, ease: easeOut }}
             className="mx-auto mt-6 max-w-2xl text-lg font-normal leading-relaxed text-muted-foreground"
           >
             Meridian gives support agents evidence-grounded answers with full
             provenance tracing — and gets smarter from every resolved ticket.
           </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: 0.5,
-              delay: 0.4,
-              ease: easeOut,
-            }}
-            className="mt-8 flex flex-wrap items-center justify-center gap-4"
-          >
-            <button className="rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/80 hover:shadow-sm">
-              Try the Copilot
-            </button>
-            <button className="rounded-full border border-input bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-all duration-150 hover:bg-card hover:border-muted-foreground/40">
-              Watch it learn
-            </button>
-          </motion.div>
         </div>
       </section>
 
-      {/* =============================================
-          Section B — Trust Bar
-          ============================================= */}
-      <section className="py-8 border-b border-border">
-        <div className="mx-auto max-w-[1280px] px-6 md:px-12 lg:px-16">
-          <motion.p
-            {...fadeInUp}
-            className="text-center text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground/60 mb-6"
-          >
-            Integrates with your existing stack
-          </motion.p>
-          <div className="flex items-center justify-center gap-10 flex-wrap">
-            {logos.map((name, i) => (
-              <motion.div
-                key={name}
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.3, delay: i * 0.04 }}
-                className="flex h-8 items-center"
-              >
-                <span className="text-sm font-medium text-muted-foreground/40">
-                  {name}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* =============================================
-          Section C — Feature Bento Grid
-          ============================================= */}
+      {/* ── Live Demo Section ── */}
       <section className="py-16 lg:py-20">
-        <div className="mx-auto max-w-[1280px] px-6 md:px-12 lg:px-16">
+        <div className="mx-auto max-w-3xl px-6 md:px-12 lg:px-16">
           <motion.div {...fadeInUp} className="text-center mb-12">
             <h2 className="text-[28px] font-semibold tracking-[-0.01em] text-foreground">
-              Three surfaces. One learning loop.
+              Live Self-Learning Demo
             </h2>
             <p className="mt-3 text-base text-muted-foreground">
-              Copilot creates value. Learning engine compounds it. Dashboard
-              governs it.
+              Watch the system encounter a novel problem, detect the knowledge gap,
+              generate a new article, and then retrieve it — all in real time.
             </p>
           </motion.div>
 
-          <BentoGrid>
-            {/* Cell 1: Copilot (8 cols, 2 rows) */}
-            <BentoCell span={8} rowSpan={2} index={0}>
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="text-lg font-medium text-foreground">
-                    Evidence-Grounded Copilot
-                  </h3>
-                  <p className="mt-2 text-sm text-muted-foreground max-w-md">
-                    Real-time, citation-backed recommendations for every support
-                    interaction. Every answer traces to its source.
-                  </p>
-                </div>
-                <LottieAnimation
-                  src="/lottie/chat-bubbles.json"
-                  width={80}
-                  height={80}
-                  className="shrink-0 opacity-60"
-                />
-              </div>
-              {/* Mock copilot screenshot */}
-              <div className="mt-6 rounded-[10px] border border-border bg-background p-4">
-                <div className="flex gap-3">
-                  <div className="flex-[38%] space-y-2">
-                    <div className="h-3 w-3/4 rounded bg-muted" />
-                    <div className="h-3 w-1/2 rounded bg-muted" />
-                    <div className="h-3 w-2/3 rounded bg-muted" />
-                    <div className="h-3 w-3/4 rounded bg-muted" />
-                  </div>
-                  <div className="flex-[62%] space-y-2">
-                    <div className="h-3 w-full rounded bg-muted" />
-                    <div className="h-3 w-5/6 rounded bg-muted" />
-                    <div className="h-3 w-4/5 rounded bg-muted" />
-                  </div>
-                </div>
-              </div>
-            </BentoCell>
-
-            {/* Cell 2: Classification Engine (4 cols) */}
-            <BentoCell span={4} index={1}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-base font-medium text-foreground">
-                    Classification Engine
-                  </h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Routes questions to scripts, articles, or past tickets with
-                    71% accuracy.
-                  </p>
-                </div>
-                <Search className="h-6 w-6 shrink-0 text-muted-foreground/40" />
-              </div>
-            </BentoCell>
-
-            {/* Cell 3: Provenance Tracing (4 cols) */}
-            <BentoCell span={4} index={2}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-base font-medium text-foreground">
-                    Provenance Tracing
-                  </h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Every answer traces to its source ticket, conversation, and
-                    script.
-                  </p>
-                </div>
-                <LottieAnimation
-                  src="/lottie/connected-nodes.json"
-                  width={60}
-                  height={30}
-                  className="shrink-0 opacity-60"
-                />
-              </div>
-            </BentoCell>
-
-            {/* Cell 4: Gap Detection (4 cols) */}
-            <BentoCell span={4} index={3}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-base font-medium text-foreground">
-                    Gap Detection
-                  </h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Automatically spots when new issues lack knowledge base
-                    coverage.
-                  </p>
-                </div>
-                <LottieAnimation
-                  src="/lottie/radar.json"
-                  width={40}
-                  height={40}
-                  className="shrink-0 opacity-60"
-                />
-              </div>
-            </BentoCell>
-
-            {/* Cell 5: Self-Learning Loop (4 cols) */}
-            <BentoCell span={4} index={4}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-base font-medium text-foreground">
-                    Self-Learning Loop
-                  </h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Drafts KB articles from resolved tickets, reviewed by
-                    humans, indexed automatically.
-                  </p>
-                </div>
-                <LottieAnimation
-                  src="/lottie/document-lightbulb.json"
-                  width={40}
-                  height={40}
-                  className="shrink-0 opacity-60"
-                />
-              </div>
-            </BentoCell>
-
-            {/* Cell 6: QA Scoring (8 cols) */}
-            <BentoCell span={8} index={5}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-medium text-foreground">
-                    QA Scoring
-                  </h3>
-                  <p className="mt-2 text-sm text-muted-foreground max-w-lg">
-                    Production-grade rubric scoring with 20 parameters, red flag
-                    detection, and coaching recommendations.
-                  </p>
-                </div>
-                <LottieAnimation
-                  src="/lottie/checklist.json"
-                  width={48}
-                  height={48}
-                  className="shrink-0 opacity-60"
-                />
-              </div>
-            </BentoCell>
-          </BentoGrid>
-        </div>
-      </section>
-
-      {/* Gradient divider */}
-      <div className="gradient-divider mx-auto max-w-[1280px]" />
-
-      {/* =============================================
-          Section D — How It Works
-          ============================================= */}
-      <section className="py-16 lg:py-20">
-        <div className="mx-auto max-w-[1280px] px-6 md:px-12 lg:px-16">
-          <motion.div {...fadeInUp} className="text-center mb-16">
-            <h2 className="text-[28px] font-semibold tracking-[-0.01em] text-foreground">
-              How it works
-            </h2>
-          </motion.div>
-
-          <div className="mx-auto max-w-2xl">
-            {[
-              {
-                step: "1",
-                title: "Ask",
-                desc: "Agent types a question. The copilot classifies the intent and retrieves evidence-grounded answers from scripts, KB articles, and past tickets.",
-                icon: MessageCircle,
-              },
-              {
-                step: "2",
-                title: "Resolve",
-                desc: "Agent uses the citation-backed answer to resolve the issue. The ticket closes with a full audit trail of what was referenced.",
-                icon: Shield,
-              },
-              {
-                step: "3",
-                title: "Learn",
-                desc: "The system detects knowledge gaps, drafts new articles from resolved tickets, and improves retrieval accuracy — automatically.",
-                icon: Brain,
-              },
-            ].map((item, i) => (
-              <motion.div
-                key={item.step}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{
-                  duration: 0.5,
-                  delay: i * 0.15,
-                  ease: easeOut,
-                }}
-                className="relative flex gap-6 pb-12 last:pb-0"
-              >
-                {/* Vertical connector line */}
-                {i < 2 && (
-                  <div className="absolute left-[23px] top-14 bottom-0 w-px bg-input" />
-                )}
-
-                {/* Step number */}
-                <div className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-card border border-input">
-                  <span className="text-xl font-light text-muted-foreground/60">
-                    {item.step}
-                  </span>
-                </div>
-
-                {/* Content */}
-                <div className="pt-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-lg font-medium text-foreground">
-                      {item.title}
-                    </h3>
-                    <item.icon className="h-4 w-4 text-muted-foreground/40" />
-                  </div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {item.desc}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Gradient divider */}
-      <div className="gradient-divider mx-auto max-w-[1280px]" />
-
-      {/* =============================================
-          Section E — Testimonials
-          ============================================= */}
-      <section className="py-16 lg:py-20">
-        <div className="mx-auto max-w-[1280px] px-6 md:px-12 lg:px-16">
-          <motion.div {...fadeInUp} className="text-center mb-12">
-            <h2 className="text-[28px] font-semibold tracking-[-0.01em] text-foreground">
-              Built for support teams that care about trust
-            </h2>
-          </motion.div>
-
-          <TestimonialCarousel />
-        </div>
-      </section>
-
-      {/* Gradient divider */}
-      <div className="gradient-divider mx-auto max-w-[1280px]" />
-
-      {/* =============================================
-          Section F — Pricing
-          ============================================= */}
-      <section className="py-16 lg:py-20">
-        <div className="mx-auto max-w-[1280px] px-6 md:px-12 lg:px-16">
-          <motion.div {...fadeInUp} className="text-center mb-12">
-            <h2 className="text-[28px] font-semibold tracking-[-0.01em] text-foreground">
-              Simple, transparent pricing
-            </h2>
-          </motion.div>
-
-          <PricingSection />
-        </div>
-      </section>
-
-      {/* =============================================
-          Section G — Footer
-          ============================================= */}
-      <footer className="border-t border-border bg-card">
-        <div className="mx-auto max-w-[1280px] px-6 py-8 md:px-12 lg:px-16">
-          <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-            <span className="text-sm font-semibold text-foreground">
-              Meridian
-            </span>
-            <div className="flex items-center gap-6">
-              {["Documentation", "GitHub", "API Reference", "Contact"].map(
-                (link) => (
-                  <a
-                    key={link}
-                    href="#"
-                    className="text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    {link}
-                  </a>
-                )
+          {/* Controls */}
+          <div className="flex items-center justify-center gap-3 mb-10">
+            <button
+              onClick={runAll}
+              disabled={runningAll}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {runningAll ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4" />
+                  Run Full Pipeline
+                </>
               )}
-            </div>
+            </button>
+            <button
+              onClick={handleReset}
+              disabled={runningAll}
+              className="inline-flex items-center gap-2 rounded-full border border-input px-5 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </button>
+          </div>
+
+          {/* Step-by-step pipeline */}
+          <div className="space-y-0">
+            {steps.map((step, i) => {
+              const status = stepStatuses[step.id] ?? "idle";
+              const result = formatResult(step.id);
+              const canRun =
+                !runningAll &&
+                status !== "running" &&
+                (i === 0 || stepStatuses[steps[i - 1].id] === "done");
+
+              return (
+                <div key={step.id} className="relative">
+                  {/* Connector line */}
+                  {i < steps.length - 1 && (
+                    <div className="absolute left-[23px] top-14 bottom-0 w-px bg-border" />
+                  )}
+
+                  <div className="relative flex gap-4 pb-8">
+                    {/* Step icon */}
+                    <div
+                      className={`relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                        status === "done"
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950"
+                          : status === "running"
+                          ? "border-primary bg-primary/10"
+                          : status === "error"
+                          ? "border-red-500 bg-red-50 dark:bg-red-950"
+                          : "border-border bg-card"
+                      }`}
+                    >
+                      {getStepIcon(step.id, step.icon)}
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 pt-1">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-medium text-foreground">
+                            {step.title}
+                          </h3>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {step.description}
+                          </p>
+                        </div>
+                        {status === "idle" && canRun && (
+                          <button
+                            onClick={() => runStep(step)}
+                            className="shrink-0 rounded-full border border-input px-3 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted transition-colors"
+                          >
+                            Run
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Result */}
+                      {result && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          className="mt-2 rounded-lg border border-border bg-muted/50 px-3 py-2"
+                        >
+                          <p className="text-xs text-foreground">{result}</p>
+                        </motion.div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </footer>
+      </section>
     </div>
   );
 }

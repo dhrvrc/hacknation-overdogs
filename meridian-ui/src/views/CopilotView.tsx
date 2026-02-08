@@ -26,6 +26,9 @@ export default function CopilotView() {
             onInsertReply={actions.setSuggestedText}
             onApproveDraft={actions.approveDraft}
             onRejectDraft={actions.rejectDraft}
+            onViewConversation={actions.loadConversation}
+            activeConversation={state.activeConversation}
+            onCloseConversation={actions.closeConversation}
           />
         </div>
 

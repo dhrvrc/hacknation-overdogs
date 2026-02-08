@@ -106,6 +106,8 @@ class QueryRequest(BaseModel):
 
 class QAScoreRequest(BaseModel):
     ticket_number: str
+    transcript: str = ""    # pasted transcript (paste mode)
+    ticket_data: str = ""   # pasted ticket data (paste mode)
 
 
 # ============================================================================
@@ -219,7 +221,8 @@ def get_stub_dashboard_stats() -> dict:
             "approved": 0,
             "rejected": 0,
             "pending": 0,
-            "pending_drafts": []
+            "pending_drafts": [],
+            "recent_activity": [],
         },
         "tickets": {
             "total": 0,
@@ -399,6 +402,21 @@ def get_dashboard():
                 "generated_at": draft.generated_at
             })
 
+        # Recent activity from learning events
+        recent_activity = []
+        if learning_events is not None and len(learning_events) > 0:
+            try:
+                recent = learning_events.sort_values("Timestamp", ascending=False).head(8)
+                for _, row in recent.iterrows():
+                    recent_activity.append({
+                        "id": str(row.get("Generated_KB_Article_ID", "")),
+                        "status": "approved" if row.get("Final_Status") == "Approved" else "rejected",
+                        "date": str(row.get("Timestamp", ""))[:5],
+                        "role": str(row.get("Reviewer_Role", "Support")),
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to build recent activity: {e}")
+
         # Ticket stats
         tickets = ds.df_tickets if hasattr(ds, 'df_tickets') else None
         if tickets is not None:
@@ -438,7 +456,8 @@ def get_dashboard():
                 "approved": approved,
                 "rejected": rejected,
                 "pending": len(pending_drafts),
-                "pending_drafts": pending_drafts_data
+                "pending_drafts": pending_drafts_data,
+                "recent_activity": recent_activity,
             },
             "tickets": {
                 "total": total_tickets,
@@ -508,13 +527,38 @@ def score_qa(req: QAScoreRequest):
     if not ENGINE_AVAILABLE:
         raise HTTPException(503, "Engine not available - cannot score tickets")
 
-    # Handle frontend paste mode: return a template score
+    # Handle frontend paste mode
     if req.ticket_number == "paste":
-        logger.info("QA scoring in paste mode — returning template score")
-        result = qa._template_score(
-            {"Ticket_Number": "paste", "Subject": "Pasted transcript"},
-            None,
-        )
+        if req.transcript or req.ticket_data:
+            # Real LLM scoring of pasted content
+            logger.info("QA scoring in paste mode — scoring pasted content with LLM")
+            ticket_dict = {
+                "Ticket_Number": "paste",
+                "Subject": "Pasted evaluation",
+                "Description": req.ticket_data,
+                "Resolution": "",
+            }
+            conversation_dict = (
+                {"Transcript": req.transcript, "Agent_Name": "Agent", "Channel": "Pasted"}
+                if req.transcript
+                else None
+            )
+            try:
+                if qa.openai_available:
+                    prompt = qa._build_user_prompt(ticket_dict, conversation_dict)
+                    result = qa._call_llm(prompt)
+                else:
+                    result = qa._template_score(ticket_dict, conversation_dict)
+            except Exception as e:
+                logger.warning(f"LLM scoring failed for paste mode, using template: {e}")
+                result = qa._template_score(ticket_dict, conversation_dict)
+        else:
+            # No pasted content — return template
+            logger.info("QA scoring in paste mode — no content, returning template score")
+            result = qa._template_score(
+                {"Ticket_Number": "paste", "Subject": "Pasted transcript"},
+                None,
+            )
         result = qa._apply_autozero_rules(result)
         return result
 
@@ -526,6 +570,31 @@ def score_qa(req: QAScoreRequest):
     except Exception as e:
         logger.error(f"QA scoring failed: {e}")
         raise HTTPException(500, f"QA scoring failed: {str(e)}")
+
+
+@app.get("/api/tickets/sample")
+def get_sample_tickets():
+    """
+    Return a sample of real ticket numbers with subjects for the QA form dropdown.
+
+    Returns a list of {value, label} dicts suitable for a <select> element.
+    """
+    if not ENGINE_AVAILABLE:
+        return []
+
+    try:
+        tickets_df = ds.df_tickets
+        sample = tickets_df.sample(min(10, len(tickets_df)), random_state=42)
+        return [
+            {
+                "value": row["Ticket_Number"],
+                "label": f"{row['Ticket_Number']} — {str(row.get('Subject', ''))[:40]}",
+            }
+            for _, row in sample.iterrows()
+        ]
+    except Exception as e:
+        logger.error(f"Sample tickets failed: {e}")
+        return []
 
 
 @app.get("/api/kb/drafts")

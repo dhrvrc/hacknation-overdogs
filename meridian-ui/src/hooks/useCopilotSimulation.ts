@@ -16,6 +16,16 @@ import {
 
 // ── Public state & actions interfaces ────────────────────────
 
+export interface ConversationData {
+  ticket_number: string;
+  conversation_id: string;
+  channel: string;
+  agent_name: string;
+  sentiment: string;
+  issue_summary: string;
+  transcript: string;
+}
+
 export interface SimulationState {
   scenario: CopilotScenario | null;
   messages: ChatMessage[];
@@ -24,6 +34,7 @@ export interface SimulationState {
   isPlaying: boolean;
   isResolved: boolean;
   currentMessageIndex: number;
+  activeConversation: ConversationData | null;
 }
 
 export interface SimulationActions {
@@ -35,6 +46,8 @@ export interface SimulationActions {
   suggestedText: string;
   approveDraft: (draftId: string) => void;
   rejectDraft: (draftId: string) => void;
+  loadConversation: (ticketNumber: string) => void;
+  closeConversation: () => void;
 }
 
 // ── Hook ─────────────────────────────────────────────────────
@@ -48,6 +61,8 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
   const [isResolved, setIsResolved] = useState(false);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(-1);
   const [suggestedText, setSuggestedText] = useState("");
+  const [activeConversation, setActiveConversation] =
+    useState<ConversationData | null>(null);
 
   // Refs for timeout management and avoiding stale closures
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -426,6 +441,22 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
     );
   }, []);
 
+  /**
+   * Load a conversation transcript for a ticket (shown in copilot panel).
+   */
+  const loadConversation = useCallback(async (ticketNumber: string) => {
+    try {
+      const data = await api.getConversation(ticketNumber);
+      setActiveConversation(data);
+    } catch (err) {
+      console.error("Failed to load conversation:", err);
+    }
+  }, []);
+
+  const closeConversation = useCallback(() => {
+    setActiveConversation(null);
+  }, []);
+
   const reset = useCallback(() => {
     clearAllTimeouts();
     setScenario(null);
@@ -451,6 +482,7 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
     isPlaying,
     isResolved,
     currentMessageIndex,
+    activeConversation,
   };
 
   const actions: SimulationActions = {
@@ -462,6 +494,8 @@ export function useCopilotSimulation(): [SimulationState, SimulationActions] {
     suggestedText,
     approveDraft,
     rejectDraft,
+    loadConversation,
+    closeConversation,
   };
 
   return [state, actions];

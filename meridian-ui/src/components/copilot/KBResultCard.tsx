@@ -2,23 +2,25 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { MessageSquare } from "lucide-react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 interface KBResultCardProps {
   results: any[];
+  onViewConversation?: (ticketNumber: string) => void;
 }
 
 function getDocIcon(docType: string) {
   switch (docType) {
     case "SCRIPT":
-      return "📜";
+      return "\u{1F4DC}";
     case "KB":
-      return "📖";
+      return "\u{1F4D6}";
     case "TICKET":
-      return "🎫";
+      return "\u{1F3AB}";
     default:
-      return "📄";
+      return "\u{1F4C4}";
   }
 }
 
@@ -28,7 +30,7 @@ function getScoreColor(score: number) {
   return "text-red-500 dark:text-red-400";
 }
 
-export default function KBResultCard({ results }: KBResultCardProps) {
+export default function KBResultCard({ results, onViewConversation }: KBResultCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -37,13 +39,26 @@ export default function KBResultCard({ results }: KBResultCardProps) {
       className="space-y-1.5"
     >
       {results.map((result: any, i: number) => (
-        <ResultItem key={result.doc_id || i} result={result} index={i} />
+        <ResultItem
+          key={result.doc_id || i}
+          result={result}
+          index={i}
+          onViewConversation={onViewConversation}
+        />
       ))}
     </motion.div>
   );
 }
 
-function ResultItem({ result, index }: { result: any; index: number }) {
+function ResultItem({
+  result,
+  index,
+  onViewConversation,
+}: {
+  result: any;
+  index: number;
+  onViewConversation?: (ticketNumber: string) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -95,18 +110,31 @@ function ResultItem({ result, index }: { result: any; index: number }) {
               {result.body?.slice(0, 400)}
               {result.body?.length > 400 ? "..." : ""}
             </p>
-            {result.metadata?.module && (
-              <div className="mt-1.5 flex flex-wrap gap-1">
+            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+              {result.metadata?.module && (
                 <span className="bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
                   {result.metadata.module}
                 </span>
-                {result.metadata?.category && (
-                  <span className="bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
-                    {result.metadata.category}
-                  </span>
-                )}
-              </div>
-            )}
+              )}
+              {result.metadata?.category && (
+                <span className="bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
+                  {result.metadata.category}
+                </span>
+              )}
+              {result.doc_type === "TICKET" && onViewConversation && (
+                <span
+                  role="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewConversation(result.doc_id);
+                  }}
+                  className="ml-auto inline-flex items-center gap-1 rounded-full border border-input px-2 py-0.5 text-[9px] font-medium text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                >
+                  <MessageSquare className="h-2.5 w-2.5" />
+                  View Conversation
+                </span>
+              )}
+            </div>
           </motion.div>
         )}
       </button>
