@@ -112,6 +112,14 @@ class PendingDraft(BaseModel):
     generated_at: str  # ISO 8601
 
 
+class RecentActivityItem(BaseModel):
+    """A recent learning event (approved/rejected KB article)."""
+    id: str
+    status: str  # "approved" | "rejected"
+    date: str
+    role: str
+
+
 class LearningPipeline(BaseModel):
     """Learning pipeline statistics."""
     total_events: int
@@ -119,6 +127,7 @@ class LearningPipeline(BaseModel):
     rejected: int
     pending: int
     pending_drafts: List[PendingDraft]
+    recent_activity: List[RecentActivityItem] = Field(default_factory=list)
 
 
 class TicketStats(BaseModel):
@@ -254,6 +263,47 @@ class HealthResponse(BaseModel):
     status: str
     engine_available: bool
     timestamp: float
+
+
+# ============================================================================
+# POST /api/gap/check — Request/Response Models
+# ============================================================================
+
+class GapCheckRequest(BaseModel):
+    """Request model for POST /api/gap/check."""
+    ticket_number: str
+
+
+class GapCheckResponse(BaseModel):
+    """Response model for POST /api/gap/check."""
+    ticket_number: str
+    is_gap: bool
+    resolution_similarity: float
+    best_matching_kb_id: str
+    module: str
+    category: str
+    description_text: str
+
+
+# ============================================================================
+# POST /api/kb/generate — Request/Response Models
+# ============================================================================
+
+class KBGenerateRequest(BaseModel):
+    """Request model for POST /api/kb/generate."""
+    ticket_number: str
+
+
+class KBGenerateResponse(BaseModel):
+    """Response model for POST /api/kb/generate."""
+    draft_id: str
+    title: str
+    body: str
+    source_ticket: str
+    module: str
+    category: str
+    generated_at: str
+    generation_method: str
 
 
 # ============================================================================

@@ -16,10 +16,23 @@ import * as api from "@/lib/api";
 
 export default function DashboardView() {
   const [data, setData] = useState<any>(null);
+  const [evalRunning, setEvalRunning] = useState(false);
 
   function loadData() {
     setData(null);
     api.getDashboard().then(setData);
+  }
+
+  async function handleRunEval() {
+    setEvalRunning(true);
+    try {
+      await api.runEvaluation();
+      loadData(); // refresh dashboard with new eval results
+    } catch {
+      // ignore — dashboard still shows defaults
+    } finally {
+      setEvalRunning(false);
+    }
   }
 
   useEffect(() => {
@@ -52,12 +65,28 @@ export default function DashboardView() {
             Knowledge health, learning pipeline, and evaluation metrics
           </p>
         </div>
-        <button
-          onClick={loadData}
-          className="rounded-full border border-input px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRunEval}
+            disabled={evalRunning}
+            className="rounded-full border border-input px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {evalRunning ? (
+              <span className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-full border-2 border-input border-t-foreground animate-spin" />
+                Running eval...
+              </span>
+            ) : (
+              "Run Evaluation"
+            )}
+          </button>
+          <button
+            onClick={loadData}
+            className="rounded-full border border-input px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* 1. Knowledge Health (full width) */}

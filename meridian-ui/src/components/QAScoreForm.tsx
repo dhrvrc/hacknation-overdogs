@@ -22,16 +22,10 @@ import {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// ── 8 sample tickets (spec says 5-10) ──────────────────────
-const SAMPLE_TICKETS = [
+// ── Fallback sample tickets (replaced by API on mount) ──────
+const FALLBACK_TICKETS = [
   { value: "CS-38908386", label: "CS-38908386 — Date Advance" },
   { value: "CS-02155732", label: "CS-02155732 — HAP Voucher" },
-  { value: "CS-44219876", label: "CS-44219876 — Move-Out Failure" },
-  { value: "CS-55783210", label: "CS-55783210 — Move-Out Charges" },
-  { value: "CS-12345678", label: "CS-12345678 — HAP Sync" },
-  { value: "CS-33445566", label: "CS-33445566 — Certification Fields" },
-  { value: "CS-77889900", label: "CS-77889900 — Recertification Date" },
-  { value: "CS-99001122", label: "CS-99001122 — General Inquiry" },
 ];
 
 type ScoreValue = "Yes" | "No" | "N/A";
@@ -268,6 +262,17 @@ export default function QAScoreForm({
   const [mode, setMode] = useState<Mode>("ai");
   const [ticket, setTicket] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [sampleTickets, setSampleTickets] = useState(FALLBACK_TICKETS);
+
+  // Fetch real ticket list from backend on mount
+  useEffect(() => {
+    fetch("http://localhost:8000/api/tickets/sample")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) setSampleTickets(data);
+      })
+      .catch(() => {}); // silently fallback to hardcoded
+  }, []);
 
   // Manual scoring state
   const [interactionState, setInteractionState] = useState<
@@ -417,7 +422,7 @@ export default function QAScoreForm({
   async function handlePasteSubmit() {
     setAiLoading(true);
     try {
-      const data = await api.scoreQA("paste");
+      const data = await api.scoreQA("paste", transcript, ticketData);
       onScoreReady(data);
     } finally {
       setAiLoading(false);
@@ -464,7 +469,7 @@ export default function QAScoreForm({
                 className="w-full rounded-[10px] border border-input bg-background px-3 py-2.5 text-sm text-foreground focus:border-foreground focus:outline-none appearance-none cursor-pointer pr-8"
               >
                 <option value="">Choose a ticket...</option>
-                {SAMPLE_TICKETS.map((t) => (
+                {sampleTickets.map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label}
                   </option>

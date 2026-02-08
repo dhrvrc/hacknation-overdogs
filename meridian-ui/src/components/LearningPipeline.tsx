@@ -13,6 +13,13 @@ interface Draft {
   generated_at: string;
 }
 
+interface ActivityItem {
+  id: string;
+  status: string;
+  date: string;
+  role: string;
+}
+
 interface LearningPipelineProps {
   data: {
     total_events: number;
@@ -20,17 +27,12 @@ interface LearningPipelineProps {
     rejected: number;
     pending: number;
     pending_drafts: Draft[];
+    recent_activity?: ActivityItem[];
   };
 }
 
-// Static recent activity mock (learning events already approved/rejected)
-const RECENT_ACTIVITY = [
-  { id: "KB-SYN-0001", status: "approved", date: "02/19", role: "Tier 3 Support" },
-  { id: "KB-SYN-0002", status: "approved", date: "02/19", role: "Tier 3 Support" },
-  { id: "KB-SYN-0042", status: "approved", date: "02/18", role: "Tier 2 Support" },
-  { id: "KB-SYN-0158", status: "rejected", date: "02/20", role: "Tier 3 Support" },
-  { id: "KB-SYN-0099", status: "approved", date: "02/17", role: "Tier 2 Support" },
-];
+// Fallback when backend has no learning events
+const FALLBACK_ACTIVITY: ActivityItem[] = [];
 
 export default function LearningPipeline({ data }: LearningPipelineProps) {
   const [draftStatuses, setDraftStatuses] = useState<Record<string, "approved" | "rejected" | "pending">>({});
@@ -156,7 +158,7 @@ export default function LearningPipeline({ data }: LearningPipelineProps) {
           Recent Activity
         </h4>
         <div className="space-y-1">
-          {RECENT_ACTIVITY.map((item, i) => (
+          {(data.recent_activity ?? FALLBACK_ACTIVITY).map((item, i) => (
             <div key={i} className="flex items-center gap-2 text-xs py-1">
               <span
                 className={

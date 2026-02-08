@@ -19,6 +19,8 @@ from meridian.server.contracts import (
     ApproveResponse,
     RejectResponse,
     HealthResponse,
+    GapCheckResponse,
+    KBGenerateResponse,
     adapt_eval_results,
     build_default_eval_results,
 )
@@ -518,3 +520,64 @@ class TestAdapterFunctions:
         }
         result = adapt_eval_results(engine_output)
         assert "support" not in result["classification"]["per_class"]["SCRIPT"]
+
+
+# ============================================================================
+# Gap Check + KB Generate contracts (copilot endpoints)
+# ============================================================================
+
+MOCK_GAP_CHECK = {
+    "ticket_number": "CS-03758997",
+    "is_gap": True,
+    "resolution_similarity": 0.544,
+    "best_matching_kb_id": "KB-ABC123",
+    "module": "Affordable / Repayments",
+    "category": "Repayment Plan",
+    "description_text": "Repayment plan ending balance is incorrect",
+}
+
+MOCK_GAP_CHECK_NO_GAP = {
+    "ticket_number": "CS-38908386",
+    "is_gap": False,
+    "resolution_similarity": 0.78,
+    "best_matching_kb_id": "KB-SYN-0001",
+    "module": "Accounting / Date Advance",
+    "category": "Advance Property Date",
+    "description_text": "Date advance fails",
+}
+
+MOCK_KB_GENERATE = {
+    "draft_id": "DRAFT-20260208",
+    "title": "Repayment Plan Balance Recalculation Workaround",
+    "body": "Summary\n- After posting installments, re-validate the repayment schedule.",
+    "source_ticket": "CS-03758997",
+    "module": "Affordable / Repayments",
+    "category": "Repayment Plan",
+    "generated_at": "2026-02-08T12:00:00Z",
+    "generation_method": "llm",
+}
+
+
+class TestGapCheckResponseContract:
+    """POST /api/gap/check response matches contract."""
+
+    def test_gap_detected_validates(self) -> None:
+        resp = GapCheckResponse.model_validate(MOCK_GAP_CHECK)
+        assert resp.is_gap is True
+        assert resp.resolution_similarity == 0.544
+        assert resp.module == "Affordable / Repayments"
+
+    def test_no_gap_validates(self) -> None:
+        resp = GapCheckResponse.model_validate(MOCK_GAP_CHECK_NO_GAP)
+        assert resp.is_gap is False
+        assert resp.resolution_similarity == 0.78
+
+
+class TestKBGenerateResponseContract:
+    """POST /api/kb/generate response matches contract."""
+
+    def test_kb_draft_validates(self) -> None:
+        resp = KBGenerateResponse.model_validate(MOCK_KB_GENERATE)
+        assert resp.draft_id == "DRAFT-20260208"
+        assert resp.generation_method == "llm"
+        assert resp.source_ticket == "CS-03758997"
