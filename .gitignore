@@ -2,3 +2,4 @@
 .python-version
 meridian/__pycache__/
 meridian/engine/__pycache__/
+meridian/server/__pycache__/

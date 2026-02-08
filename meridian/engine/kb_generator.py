@@ -9,6 +9,7 @@ from typing import List, Optional, Tuple
 from datetime import datetime
 
 from .data_loader import DataStore, Document
+from ..config import OPENAI_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -35,20 +36,20 @@ class KBGenerator:
 
     def __init__(self, datastore: DataStore, api_key: str = ""):
         self.datastore = datastore
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
         self.drafts: List[KBDraft] = []
 
-        # Try to import anthropic
-        self.anthropic_available = False
+        # Try to import openai
+        self.openai_available = False
         if self.api_key:
             try:
-                import anthropic
-                self.client = anthropic.Anthropic(api_key=self.api_key)
-                self.anthropic_available = True
-                logger.info("KB Generator initialized with Claude API")
+                import openai
+                self.client = openai.OpenAI(api_key=self.api_key)
+                self.openai_available = True
+                logger.info("KB Generator initialized with OpenAI API")
             except ImportError:
-                logger.warning("anthropic package not installed - using template fallback")
-                self.anthropic_available = False
+                logger.warning("openai package not installed - using template fallback")
+                self.openai_available = False
         else:
             logger.info("No API key provided - using template fallback")
 
@@ -84,7 +85,7 @@ class KBGenerator:
                 script = script.to_dict()
 
         # Generate
-        if self.anthropic_available:
+        if self.openai_available:
             title, body = self._generate_with_llm(ticket.to_dict(), conversation, script)
             method = "llm"
         else:
@@ -134,10 +135,10 @@ class KBGenerator:
         script: Optional[dict]
     ) -> Tuple[str, str]:
         """
-        Call Claude API to generate title and body.
+        Call OpenAI API to generate title and body.
         Returns (title, body).
         """
-        import anthropic
+        import openai
 
         # Build system prompt
         system_prompt = """You are a technical writer for a support knowledge base. Generate a structured KB article from the provided ticket, conversation, and script information.
@@ -207,18 +208,18 @@ Inputs: {script.get('Script_Inputs')}
 Script Text: {script_text}
 """
 
-        # Call Claude
+        # Call OpenAI
         try:
-            message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+            response = self.client.chat.completions.create(
+                model=OPENAI_MODEL,
                 max_tokens=2000,
-                system=system_prompt,
                 messages=[
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ]
             )
 
-            full_text = message.content[0].text
+            full_text = response.choices[0].message.content
 
             # Extract title (first line) and body (rest)
             lines = full_text.strip().split('\n', 1)
@@ -386,13 +387,13 @@ if __name__ == "__main__":
     print(f"[OK] Loaded {len(ds.documents)} documents\n")
 
     # Check for API key
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    api_key = os.environ.get("OPENAI_API_KEY", "")
     has_api_key = len(api_key) > 0
 
     if has_api_key:
-        print("[INFO] ANTHROPIC_API_KEY found - will test LLM generation")
+        print("[INFO] OPENAI_API_KEY found - will test LLM generation")
     else:
-        print("[INFO] No ANTHROPIC_API_KEY - will test template fallback")
+        print("[INFO] No OPENAI_API_KEY - will test template fallback")
 
     # Create generator
     gen = KBGenerator(ds, api_key=api_key)
@@ -591,7 +592,7 @@ if __name__ == "__main__":
             print("\nNote: LLM generation was tested")
         else:
             print("\nNote: Only template generation was tested (no API key)")
-            print("      Set ANTHROPIC_API_KEY to test LLM generation")
+            print("      Set OPENAI_API_KEY to test LLM generation")
     else:
         print(f"[FAIL] {passed}/{total} tests passed")
         sys.exit(1)
