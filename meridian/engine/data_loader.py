@@ -2,10 +2,11 @@
 Meridian Data Loader
 Loads the entire dataset into memory and builds a unified document corpus.
 """
+import re
 import time
 import logging
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,74 @@ class DataStore:
 def safe_str(value) -> str:
     """Convert value to string, returning empty string for NaN/None."""
     return str(value) if pd.notna(value) else ""
+
+
+# Placeholder tokens to strip from SQL (they add noise, not signal)
+_PLACEHOLDER_RE = re.compile(r'<[A-Z_]+>')
+# SQL noise tokens that appear in every script
+_SQL_NOISE = frozenset({
+    'use', 'go', 'set', 'where', 'and', 'or', 'in', 'null', 'not',
+    'select', 'from', 'declare', 'int', 'varchar', 'bit', 'money',
+    'table', 'identity', 'begin', 'end', 'if', 'else', 'while',
+    'as', 'on', 'into', 'values', 'output', 'exec', 'execute',
+    'update', 'delete', 'insert', 'join', 'left', 'right', 'inner',
+    'examplenote',
+})
+
+
+def extract_sql_objects(sql_text: str) -> Set[str]:
+    """
+    Extract meaningful SQL object names from script SQL body.
+
+    Pulls table/view names from UPDATE/DELETE FROM/INSERT INTO/FROM/JOIN,
+    stored procedure names from EXEC/EXECUTE, and column names from SET/WHERE.
+    Filters out placeholders and common SQL keywords.
+    """
+    objects = set()
+
+    # Table names: UPDATE <table>, DELETE FROM <table>, INSERT INTO <table>
+    for m in re.finditer(r'\bupdate\s+(\w+)', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+    for m in re.finditer(r'\bdelete\s+from\s+(\w+)', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+    for m in re.finditer(r'\binsert\s+into\s+(\w+)', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+
+    # FROM <table> (in SELECT statements, subqueries)
+    for m in re.finditer(r'\bfrom\s+(\w+)', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+
+    # JOIN <table>
+    for m in re.finditer(r'\bjoin\s+(\w+)', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+
+    # Stored procedures: EXEC/EXECUTE <proc>
+    for m in re.finditer(r'\bexec(?:ute)?\s+(\w+)', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+
+    # Column names from SET clause: SET <col> = ...
+    for m in re.finditer(r'\bset\s+(\w+)\s*=', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+
+    # Column names from WHERE clause: WHERE <col> = / IN / LIKE
+    for m in re.finditer(r'\bwhere\s+(\w+)\s*[=<>!]', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+    for m in re.finditer(r'\band\s+(\w+)\s*[=<>!]', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+    for m in re.finditer(r'\bwhere\s+(\w+)\s+in\b', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+    for m in re.finditer(r'\band\s+(\w+)\s+in\b', sql_text, re.IGNORECASE):
+        objects.add(m.group(1))
+
+    # Filter out noise and normalize case
+    objects = {
+        obj.lower() for obj in objects
+        if obj.lower() not in _SQL_NOISE
+        and not _PLACEHOLDER_RE.match(obj)
+        and len(obj) > 1
+    }
+
+    return objects
 
 
 def load_data(path: str) -> DataStore:
@@ -234,8 +303,20 @@ def build_document_corpus(ds: DataStore) -> List[Document]:
         module = safe_str(row.get('Module', ''))
         inputs = safe_str(row.get('Script_Inputs', ''))
 
-        # search_text: "{title} {purpose} {category} {module} script backend fix {inputs} {script_text}"
-        search_text = f"{title} {purpose} {category} {module} script backend fix {inputs} {script_text}".strip()
+        # Extract meaningful SQL objects (table names, stored procs, columns)
+        sql_objects = extract_sql_objects(script_text)
+        sql_signature = ' '.join(sorted(sql_objects))
+
+        # Strip placeholder tokens from inputs (they appear in every script)
+        clean_inputs = _PLACEHOLDER_RE.sub('', inputs).strip(', ')
+
+        # search_text: SQL objects are the primary differentiator (repeated 3x),
+        # shared metadata kept once for routing, no raw SQL body (noise)
+        search_text = (
+            f"{sql_signature} {sql_signature} {sql_signature} "
+            f"{title} {category} {module} "
+            f"script backend fix {clean_inputs}"
+        ).strip()
 
         metadata = {
             'category': category,

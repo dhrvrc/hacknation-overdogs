@@ -463,15 +463,15 @@ class EvalHarness:
             # Filtered retrieval (the targeted proof)
             if delta.get('filtered_hit@5_improvement') is not None:
                 lines.append(f"\nFiltered Retrieval ({delta['num_filtered_questions']} questions targeting synthetic KBs):")
-                lines.append(f"  hit@5:  {delta['filtered_before_hit@5']:.1%} -> {delta['filtered_after_hit@5']:.1%} (+{delta['filtered_hit@5_improvement']:.1%})")
-                lines.append(f"  hit@1:  +{delta['filtered_hit@1_improvement']:.1%}")
-                lines.append(f"  hit@10: +{delta['filtered_hit@10_improvement']:.1%}")
+                lines.append(f"  hit@5:  {delta['filtered_before_hit@5']:.1%} -> {delta['filtered_after_hit@5']:.1%} ({delta['filtered_hit@5_improvement']:+.1%})")
+                lines.append(f"  hit@1:  {delta['filtered_hit@1_improvement']:+.1%}")
+                lines.append(f"  hit@10: {delta['filtered_hit@10_improvement']:+.1%}")
 
             # Overall retrieval (secondary context)
             lines.append("\nOverall Retrieval (all 1,000 questions):")
-            lines.append(f"  hit@1:  +{delta['hit@1_improvement']:.1%}")
-            lines.append(f"  hit@5:  +{delta['hit@5_improvement']:.1%}")
-            lines.append(f"  hit@10: +{delta['hit@10_improvement']:.1%}")
+            lines.append(f"  hit@1:  {delta['hit@1_improvement']:+.1%}")
+            lines.append(f"  hit@5:  {delta['hit@5_improvement']:+.1%}")
+            lines.append(f"  hit@10: {delta['hit@10_improvement']:+.1%}")
 
         lines.append("\n" + "=" * 70)
         lines.append("END OF REPORT")
