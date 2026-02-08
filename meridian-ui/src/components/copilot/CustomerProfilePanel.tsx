@@ -55,9 +55,9 @@ export default function CustomerProfilePanel({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="flex h-full flex-col overflow-y-auto"
+      className="flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain"
     >
-      <div className="space-y-2 p-3">
+      <div className="space-y-2 p-3 pb-6">
         <ProfileInfoSection profile={profile} />
         <PastTicketsSection tickets={profile.pastTickets} />
         <KnowledgeGraphSection

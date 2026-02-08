@@ -82,7 +82,7 @@ export default function CopilotPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Timeline */}
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
         {events.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <div className="flex h-12 w-12 items-center justify-center bg-muted">

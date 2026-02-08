@@ -27,6 +27,7 @@ export default function Home() {
 
   return (
     <SidebarProvider
+      className="h-svh min-h-0 overflow-hidden"
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 72)",
@@ -39,7 +40,7 @@ export default function Home() {
         activeView={activeView}
         onViewChange={setActiveView}
       />
-      <SidebarInset>
+      <SidebarInset className="overflow-hidden">
         <SiteHeader activeView={activeView} />
         <div className="flex flex-1 flex-col overflow-hidden">
           <AnimatePresence mode="wait">
@@ -50,8 +51,8 @@ export default function Home() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3, ease: easeOut }}
               className={
-                activeView === "about"
-                  ? "flex-1 overflow-auto"
+                activeView === "copilot" || activeView === "about"
+                  ? "flex-1 overflow-hidden"
                   : "flex-1 overflow-auto p-4 lg:p-6"
               }
             >

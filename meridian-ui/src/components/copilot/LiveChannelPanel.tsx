@@ -149,7 +149,7 @@ export default function LiveChannelPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
         <ChannelTabs mode={channelMode} setMode={setChannelMode} scenario={scenario} />
 
         <div className="ml-auto flex items-center gap-2">
@@ -186,7 +186,7 @@ export default function LiveChannelPanel({
 
       {/* Customer info bar */}
       {scenario && (
-        <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-2">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-4 py-2">
           <div className="flex h-6 w-6 items-center justify-center bg-muted text-xs font-semibold text-muted-foreground">
             {scenario.customer.name.charAt(0)}
           </div>
@@ -214,7 +214,7 @@ export default function LiveChannelPanel({
       )}
 
       {/* Chat / Video / Phone area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {channelMode === "chat" ? (
           <div className="px-4 py-3">
             {messages.length === 0 && !scenario ? (
@@ -285,7 +285,7 @@ export default function LiveChannelPanel({
 
       {/* Suggested reply chips + Compose bar */}
       {scenario && channelMode === "chat" && (
-        <div className="border-t border-border">
+        <div className="shrink-0 border-t border-border">
           {/* Suggested replies */}
           <AnimatePresence>
             {suggestedReplies.length > 0 && (

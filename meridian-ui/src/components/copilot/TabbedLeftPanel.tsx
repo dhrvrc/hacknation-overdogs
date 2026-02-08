@@ -88,7 +88,7 @@ export default function TabbedLeftPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Tab header */}
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
         <div className="flex border border-border bg-muted/50 p-0.5">
           {tabs.map((tab) => {
             const isTabActive = activeTab === tab.id;
