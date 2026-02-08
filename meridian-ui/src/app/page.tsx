@@ -17,13 +17,17 @@ const views: Record<ViewKey, React.ComponentType> = {
   copilot: CopilotView,
   dashboard: DashboardView,
   qa: QAScoringView,
-  about: DemoView,
 };
 
 export default function Home() {
+  const [showLanding, setShowLanding] = useState(true);
   const [activeView, setActiveView] = useState<ViewKey>("copilot");
 
   const ActiveComponent = views[activeView];
+
+  if (showLanding) {
+    return <DemoView onEnterApp={() => setShowLanding(false)} />;
+  }
 
   return (
     <SidebarProvider
@@ -51,7 +55,7 @@ export default function Home() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3, ease: easeOut }}
               className={
-                activeView === "copilot" || activeView === "about"
+                activeView === "copilot"
                   ? "flex-1 overflow-hidden"
                   : "flex-1 overflow-auto p-4 lg:p-6"
               }

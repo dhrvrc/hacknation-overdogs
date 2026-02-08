@@ -33,7 +33,7 @@ const logos = [
   "HubSpot",
 ];
 
-export default function DemoView() {
+export default function DemoView({ onEnterApp }: { onEnterApp?: () => void }) {
   return (
     <div className="overflow-hidden">
       {/* =============================================
@@ -87,7 +87,10 @@ export default function DemoView() {
             }}
             className="mt-8 flex flex-wrap items-center justify-center gap-4"
           >
-            <button className="rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/80 hover:shadow-sm">
+            <button
+              onClick={onEnterApp}
+              className="rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/80 hover:shadow-sm"
+            >
               Try the Copilot
             </button>
             <button className="rounded-full border border-input bg-transparent px-6 py-3 text-sm font-medium text-foreground transition-all duration-150 hover:bg-card hover:border-muted-foreground/40">
