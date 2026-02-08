@@ -35,6 +35,23 @@ interface EvalResultsProps {
 export default function EvalResults({ data }: EvalResultsProps) {
   const ev = data;
 
+  // Check if evaluation has been run (all zeros means not yet)
+  const allZero = Object.values(ev.retrieval.overall).every((v) => v === 0);
+
+  if (allZero) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="text-4xl mb-3 opacity-40">&#9776;</div>
+        <h4 className="text-sm font-medium text-foreground mb-1">
+          No Evaluation Data
+        </h4>
+        <p className="text-xs text-muted-foreground max-w-[260px]">
+          Click <span className="font-medium">&ldquo;Run Evaluation&rdquo;</span> to benchmark retrieval accuracy, classification, and self-learning metrics.
+        </p>
+      </div>
+    );
+  }
+
   // Retrieval bar chart: hit@1, hit@3, hit@5, hit@10 as separate items on X axis
   const retrievalData = Object.entries(ev.retrieval.overall).map(
     ([key, val]) => ({
