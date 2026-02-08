@@ -65,7 +65,7 @@ function ChannelTabs({
   ];
 
   return (
-    <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
+    <div className="flex border border-border bg-muted/50 p-0.5">
       {tabs.map((tab) => {
         const isActive = mode === tab.id;
         const isScenarioChannel = scenario?.channel === tab.id;
@@ -73,7 +73,7 @@ function ChannelTabs({
           <button
             key={tab.id}
             onClick={() => setMode(tab.id)}
-            className={`relative flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+            className={`relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all ${
               isActive
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -159,7 +159,7 @@ export default function LiveChannelPanel({
             onChange={(e) => {
               if (e.target.value) onStartScenario(e.target.value);
             }}
-            className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-muted-foreground/50 focus:ring-1 focus:ring-ring"
+            className="border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-muted-foreground/50 focus:ring-1 focus:ring-ring"
           >
             <option value="">Select scenario...</option>
             {COPILOT_SCENARIOS.map((s) => (
@@ -173,7 +173,7 @@ export default function LiveChannelPanel({
           {scenario && !isResolved && messages.length > 0 && (
             <button
               onClick={onResolveIssue}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+              className="inline-flex items-center gap-1.5 bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
             >
               <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                 <path d="M5 13l4 4L19 7" />
@@ -187,7 +187,7 @@ export default function LiveChannelPanel({
       {/* Customer info bar */}
       {scenario && (
         <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
+          <div className="flex h-6 w-6 items-center justify-center bg-muted text-xs font-semibold text-muted-foreground">
             {scenario.customer.name.charAt(0)}
           </div>
           <div>
@@ -206,7 +206,7 @@ export default function LiveChannelPanel({
             </span>
           )}
           {isResolved && (
-            <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+            <span className="ml-auto flex items-center gap-1 bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
               ✓ Resolved
             </span>
           )}
@@ -219,7 +219,7 @@ export default function LiveChannelPanel({
           <div className="px-4 py-3">
             {messages.length === 0 && !scenario ? (
               <div className="flex h-full flex-col items-center justify-center py-16 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+                <div className="flex h-12 w-12 items-center justify-center bg-muted">
                   <svg
                     className="h-6 w-6 text-muted-foreground"
                     viewBox="0 0 24 24"
@@ -251,7 +251,7 @@ export default function LiveChannelPanel({
         ) : (
           /* Video / Phone placeholder */
           <div className="flex h-full flex-col items-center justify-center py-16 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+            <div className="flex h-16 w-16 items-center justify-center bg-muted">
               {channelMode === "video" ? (
                 <svg className="h-8 w-8 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                   <path d="M23 7l-7 5 7 5V7z" />
@@ -303,7 +303,7 @@ export default function LiveChannelPanel({
                     <button
                       key={i}
                       onClick={() => onSuggestedReplyClick(reply)}
-                      className="max-w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-left text-[11px] text-foreground transition-colors hover:bg-muted"
+                      className="max-w-full border border-border bg-background px-2.5 py-1.5 text-left text-[11px] text-foreground transition-colors hover:bg-muted"
                     >
                       <span className="line-clamp-2">{reply}</span>
                     </button>
@@ -322,13 +322,13 @@ export default function LiveChannelPanel({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type a reply..."
-              className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+              className="flex-1 border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
               disabled={isResolved}
             />
             <button
               onClick={handleSend}
               disabled={!inputValue.trim() || isResolved}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground text-background transition-opacity hover:opacity-80 disabled:opacity-40"
+              className="flex h-9 w-9 items-center justify-center bg-foreground text-background transition-opacity hover:opacity-80 disabled:opacity-40"
             >
               <svg
                 className="h-4 w-4"
@@ -361,10 +361,10 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       className={`flex ${isAgent ? "justify-end" : "justify-start"}`}
     >
       <div
-        className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 ${
+        className={`max-w-[80%] px-3.5 py-2.5 ${
           isAgent
-            ? "rounded-br-md bg-foreground text-background"
-            : "rounded-bl-md border border-border bg-card text-foreground"
+            ? "bg-foreground text-background"
+            : "border border-border bg-card text-foreground"
         }`}
       >
         <div className="flex items-center gap-1.5">

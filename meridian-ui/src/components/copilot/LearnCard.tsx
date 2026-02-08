@@ -25,10 +25,10 @@ export default function LearnCard({ data, onApprove, onReject }: LearnCardProps)
       initial={{ opacity: 0, y: 12, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
-      className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-700 dark:bg-emerald-950/50"
+      className="border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-700 dark:bg-emerald-950/50"
     >
       <div className="flex items-start gap-2">
-        <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900">
+        <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center bg-emerald-100 dark:bg-emerald-900">
           <svg
             className="h-3 w-3 text-emerald-600 dark:text-emerald-400"
             viewBox="0 0 24 24"
@@ -47,7 +47,7 @@ export default function LearnCard({ data, onApprove, onReject }: LearnCardProps)
             Draft KB Article Created
           </p>
 
-          <div className="mt-2 rounded-md border border-emerald-200 bg-white/60 p-2 dark:border-emerald-800 dark:bg-emerald-950/30">
+          <div className="mt-2 border border-emerald-200 bg-white/60 p-2 dark:border-emerald-800 dark:bg-emerald-950/30">
             <p className="text-[11px] font-semibold text-foreground">
               {data.draftTitle}
             </p>
@@ -55,10 +55,10 @@ export default function LearnCard({ data, onApprove, onReject }: LearnCardProps)
               {data.summary}
             </p>
             <div className="mt-1.5 flex flex-wrap gap-1">
-              <span className="inline-flex items-center rounded bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground">
+              <span className="inline-flex items-center bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground">
                 {data.draftId}
               </span>
-              <span className="inline-flex items-center rounded bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground">
+              <span className="inline-flex items-center bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground">
                 Source: {data.sourceTicket}
               </span>
             </div>
@@ -69,7 +69,7 @@ export default function LearnCard({ data, onApprove, onReject }: LearnCardProps)
             <div className="mt-2.5 flex gap-2">
               <button
                 onClick={() => onApprove?.(data.draftId)}
-                className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-emerald-700"
+                className="inline-flex items-center gap-1 bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-emerald-700"
               >
                 <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                   <path d="M5 13l4 4L19 7" />
@@ -78,7 +78,7 @@ export default function LearnCard({ data, onApprove, onReject }: LearnCardProps)
               </button>
               <button
                 onClick={() => onReject?.(data.draftId)}
-                className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-white px-2.5 py-1 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-950/50"
+                className="inline-flex items-center gap-1 border border-red-300 bg-white px-2.5 py-1 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-950/50"
               >
                 <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                   <path d="M6 18L18 6M6 6l12 12" />
@@ -89,7 +89,7 @@ export default function LearnCard({ data, onApprove, onReject }: LearnCardProps)
           ) : (
             <div className="mt-2">
               <span
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium ${
+                className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium ${
                   data.status === "approved"
                     ? "bg-emerald-200 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200"
                     : "bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-200"

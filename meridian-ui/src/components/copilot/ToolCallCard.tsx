@@ -40,7 +40,7 @@ export default function ToolCallCard({ data }: ToolCallCardProps) {
     >
       <button
         onClick={() => setExpanded(!expanded)}
-        className={`w-full rounded-lg border border-border ${accentClass} border-l-[3px] bg-card px-3 py-2 text-left transition-colors hover:bg-muted/30`}
+        className={`w-full border border-border ${accentClass} border-l-[3px] bg-card px-3 py-2 text-left transition-colors hover:bg-muted/30`}
       >
         <div className="flex items-center gap-2">
           <span className="text-sm">{icon}</span>
@@ -84,7 +84,7 @@ export default function ToolCallCard({ data }: ToolCallCardProps) {
                 {Object.entries(data.input).map(([key, val]) => (
                   <span
                     key={key}
-                    className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground"
+                    className="inline-flex items-center gap-1 bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground"
                   >
                     <span className="text-muted-foreground">{key}:</span>{" "}
                     {String(val)}
@@ -103,7 +103,7 @@ export default function ToolCallCard({ data }: ToolCallCardProps) {
                   {Object.entries(data.output).map(([key, val]) => (
                     <span
                       key={key}
-                      className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                      className="inline-flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                     >
                       <span className="opacity-70">{key}:</span>{" "}
                       {String(val)}

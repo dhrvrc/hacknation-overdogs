@@ -54,7 +54,7 @@ function ResultItem({ result, index }: { result: any; index: number }) {
     >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-left transition-colors hover:bg-muted/30"
+        className="w-full border border-border bg-card px-3 py-2 text-left transition-colors hover:bg-muted/30"
       >
         <div className="flex items-center gap-2">
           <span className="text-sm">{getDocIcon(result.doc_type)}</span>
@@ -97,11 +97,11 @@ function ResultItem({ result, index }: { result: any; index: number }) {
             </p>
             {result.metadata?.module && (
               <div className="mt-1.5 flex flex-wrap gap-1">
-                <span className="rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
+                <span className="bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
                   {result.metadata.module}
                 </span>
                 {result.metadata?.category && (
-                  <span className="rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
+                  <span className="bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
                     {result.metadata.category}
                   </span>
                 )}

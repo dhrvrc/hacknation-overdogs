@@ -20,7 +20,7 @@ export default function ThinkingStep({ steps, isLatest = false }: ThinkingStepPr
     >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-start gap-2 rounded-lg border border-border bg-card/50 px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+        className="flex w-full items-start gap-2 border border-border bg-card/50 px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
       >
         {/* Left accent bar */}
         <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center">

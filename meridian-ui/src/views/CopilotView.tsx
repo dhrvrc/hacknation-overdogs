@@ -17,7 +17,7 @@ export default function CopilotView() {
       className="h-[calc(100vh-6rem)]"
     >
       {/* Two-panel layout: Left = AI Copilot (38%), Right = Live Channel (62%) */}
-      <div className="grid h-full grid-cols-1 gap-0 overflow-hidden rounded-xl border border-border lg:grid-cols-[38%_1fr]">
+      <div className="grid h-full grid-cols-1 gap-0 overflow-hidden border border-border lg:grid-cols-[38%_1fr]">
         {/* Left: AI Copilot Panel */}
         <div className="hidden border-r border-border lg:block">
           <CopilotPanel

@@ -78,7 +78,7 @@ export default function CopilotPanel({
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="relative flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-blue-500">
+          <div className="relative flex h-6 w-6 items-center justify-center bg-gradient-to-br from-violet-500 to-blue-500">
             <svg
               className="h-3.5 w-3.5 text-white"
               viewBox="0 0 24 24"
@@ -106,7 +106,7 @@ export default function CopilotPanel({
       <div className="flex-1 overflow-y-auto px-3 py-3">
         {events.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+            <div className="flex h-12 w-12 items-center justify-center bg-muted">
               <svg
                 className="h-6 w-6 text-muted-foreground"
                 viewBox="0 0 24 24"

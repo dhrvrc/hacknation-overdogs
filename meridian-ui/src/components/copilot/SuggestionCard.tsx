@@ -20,10 +20,10 @@ export default function SuggestionCard({ data, onInsertReply }: SuggestionCardPr
       initial={{ opacity: 0, y: 12, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/50"
+      className="border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/50"
     >
       <div className="flex items-start gap-2">
-        <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
+        <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center bg-blue-100 dark:bg-blue-900">
           <svg
             className="h-3 w-3 text-blue-600 dark:text-blue-400"
             viewBox="0 0 24 24"
@@ -49,7 +49,7 @@ export default function SuggestionCard({ data, onInsertReply }: SuggestionCardPr
                 key={i}
                 className="flex items-start gap-1.5 text-[11px] text-blue-700 dark:text-blue-300"
               >
-                <span className="mt-0.5 flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full bg-blue-200 text-[9px] font-bold text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+                <span className="mt-0.5 flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center bg-blue-200 text-[9px] font-bold text-blue-800 dark:bg-blue-800 dark:text-blue-200">
                   {i + 1}
                 </span>
                 <span>{action}</span>
@@ -61,7 +61,7 @@ export default function SuggestionCard({ data, onInsertReply }: SuggestionCardPr
           {data.replyText && onInsertReply && (
             <button
               onClick={() => onInsertReply(data.replyText!)}
-              className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+              className="mt-2.5 inline-flex items-center gap-1.5 bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
             >
               <svg
                 className="h-3 w-3"

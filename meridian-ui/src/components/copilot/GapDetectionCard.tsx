@@ -18,10 +18,10 @@ export default function GapDetectionCard({ data }: GapDetectionCardProps) {
       initial={{ opacity: 0, y: 12, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/50"
+      className="border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/50"
     >
       <div className="flex items-start gap-2">
-        <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900">
+        <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center bg-amber-100 dark:bg-amber-900">
           <svg
             className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400"
             viewBox="0 0 24 24"
@@ -40,10 +40,10 @@ export default function GapDetectionCard({ data }: GapDetectionCardProps) {
             {data.description}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="inline-flex items-center rounded-md bg-amber-200/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-800/40 dark:text-amber-300">
+            <span className="inline-flex items-center bg-amber-200/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-800/40 dark:text-amber-300">
               Topic: {data.topic}
             </span>
-            <span className="inline-flex items-center rounded-md bg-amber-200/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-800/40 dark:text-amber-300">
+            <span className="inline-flex items-center bg-amber-200/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-800/40 dark:text-amber-300">
               Module: {data.module}
             </span>
           </div>
